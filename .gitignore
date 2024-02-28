@@ -1,0 +1,23 @@
+# Byte-compiled files
+
+__pycache__/
+*.py[cod]
+
+# C extensions
+*.so
+
+# Distribution/packaging
+build/
+dist/
+
+# Test outputs
+.coverage*
+.pytest_cache
+htmlcov/
+
+# Go away, MacOS clutter
+.DS_Store
+
+# VSCode configuration files
+.env
+.vscode/ 

@@ -1,0 +1,66 @@
+# Packaging instructions for fast_ticc
+
+[tool.poetry]
+
+name = "fast_ticc"
+version = "1.0.0"
+description = "Covariance-based clustering of multivariate time-series data."
+license = "BSD-3-Clause"
+
+packages = [
+    { include = "fast_ticc", from = "src" }
+]
+
+authors = [
+    "Andy Wilson <atwilso@sandia.gov>",
+    "Keith Dalbey <kdalbey@sandia.gov>",
+    "Daniel DeLayo <drdelay@sandia.gov>",
+    "Renee Gooding <rlgoodn@sanida.gov>",
+    "Jessica Jones <jjones7@sandia.gov>",
+    "Kanad Khanna <kkhanna@sandia.gov>",
+    "Nitin Sharan <nsharan@sandia.gov>",
+    "Jon Whetzel <jhwhetz@sandia.gov"
+]
+
+maintainers = [
+    "Andy Wilson <atwilso@sandia.gov>"
+]
+
+readme = "README.md"
+repository = "https://github.com/sandialabs/fast_ticc"
+documentation = "https://fast-ticc.readthedocs.io"
+keywords = [
+    "clustering",
+    "inverse covariance",
+    "ticc",
+    "multivariate data",
+    "time series data",
+    "toeplitz"
+]
+
+classifiers = [
+    "Development Status :: 5 - Production/Stable",
+    "Intended Audience :: Science/Research",
+    "License :: OSI Approved :: BSD License",
+    "Programming Language :: Python :: Implementation : CPython",
+    "Topic :: Scientific/Engineering :: Information Analysis"
+]
+
+
+[tool.poetry.dependencies]
+numpy = ">=1.22"
+numba = ">=0.53.0"
+python = ">=3.6"
+scikit-learn = ">=1.0.0"
+
+
+[build-system]
+requires = [ "poetry-core" ]
+build-backend = "poetry.core.masonry.api"
+
+
+[tool.pytest.ini_options]
+addopts = [
+    "--import-mode=importlib"
+]
+pythonpath = "src"

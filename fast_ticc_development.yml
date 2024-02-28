@@ -1,0 +1,30 @@
+# Conda environment containing everything we need for TICC development
+#
+# To create this environment:
+#
+# conda env create -f fast_ticc_development.yml
+#
+# Then run 'conda activate fast_ticc_development' to set it as your current
+# environment.
+
+name: fast_ticc_development
+
+channels:
+  - conda-forge
+  - defaults
+
+dependencies:
+  - coverage
+  - numba
+  - numpy
+  - pandas # we need this for pytest-regressions
+  - pylint
+  - pytest
+  - pytest-cov
+  - pytest-regressions
+  - scikit-learn
+  # Sphinx and friends for building our documentation
+  - sphinx
+  - sphinx_rtd_theme
+
+
