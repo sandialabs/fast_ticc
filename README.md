@@ -44,7 +44,9 @@ column per variable.
 Call TICC to compute labels:
 
 ```python
-ticc_result = fast_ticc.ticc_compute_labels(my_data)
+ticc_result = fast_ticc.ticc_compute_labels(my_data,
+                                            window_size,
+                                            num_clusters)
 labels = ticc_result.point_labels
 ```
 
