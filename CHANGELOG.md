@@ -7,3 +7,11 @@ issues on Github so we'll include links to those.
 ## Release 1.0.0: February 20, 2024
 
 Initial release.
+
+## Release 1.0.1: March 26, 2024
+
+Fixed two bugs:
+
+- #5: Numba was missing type information.  This was causing weird compile-like errors.
+- #6: Argument order was flipped between `num_clusters` and `window_size` in the user guide.
+

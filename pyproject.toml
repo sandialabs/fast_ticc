@@ -3,7 +3,7 @@
 [tool.poetry]
 
 name = "fast_ticc"
-version = "1.0.0"
+version = "1.0.1"
 description = "Covariance-based clustering of multivariate time-series data."
 license = "BSD-3-Clause"
 
