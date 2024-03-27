@@ -21,8 +21,8 @@ Here's how to run TICC on a single data series:
 
     import fast_ticc
     ticc_result = fast_ticc.ticc_labels(my_data,
-                                        num_clusters,
-                                        window_size)
+                                        window_size,
+                                        num_clusters)
 
 
 5. Cluster labels are in ``ticc_result.point_labels``.  This is a list of integers with the same length as the number of data points in your input.  Note that if your window size is W, the first W/2 and last W-2 points will all be labeled -1, meaning "no label was computed for this point".  See the "Beginning and Ending Labels" section of the :doc:`Quirks and Caveats <quirks>` page for an explanation of why this happens and what you can do about it.
@@ -46,8 +46,9 @@ We also support labeling several data sets at the same time with a common set of
 
     import fast_ticc
     ticc_result = fast_ticc.ticc_joint_labels(my_data_arrays,
-                                              num_clusters,
-                                              window_size)
+                                              window_size,
+                                              num_clusters)
+
 
 5. Cluster labels are in ``ticc_result.point_labels``.  Unlike before, this is a list of lists.  The value of ``ticc_result.point_labels[i]`` is a list of labels for the ``i`` th data series.  As before, the first W/2 labels for each data series will be -1, as will the last W/2 labels.  See the "Beginning and Ending Labels" section of the :doc:`Quirks and Caveats <quirks>` page for an explanation of why this happens and what you can do about it.
 
