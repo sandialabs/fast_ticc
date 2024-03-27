@@ -78,7 +78,7 @@ def noop_decorator(func):
     return wrapped
 
 
-def njit(*args, **kwargs):
+def fake_njit(*args, **kwargs):
     """Decorator that invoks numba.njit() if available
 
     This decorator falls through to numba.njit if available and the
@@ -101,7 +101,7 @@ def njit(*args, **kwargs):
     return wrapper
 
 
-def prange(*args, **kwargs):
+def fake_prange(*args, **kwargs):
     """numba.prange() if available; range() if not
 
     All arguments will be passed through to range() or numba.prange()
@@ -114,3 +114,10 @@ def prange(*args, **kwargs):
     if NUMBA_AVAILABLE:
         return numba.prange(*args, **kwargs)
     return range(*args, **kwargs)
+
+if NUMBA_AVAILABLE:
+    prange = numba.prange
+    njit = numba.njit
+else:
+    prange = fake_prange
+    njit = fake_njit
