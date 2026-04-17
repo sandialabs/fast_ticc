@@ -44,7 +44,8 @@ Be aware that the current implementation will not label the last
 ways to fix that.
 """
 
-from typing import List, Sequence, Union
+from typing import List, Optional, Sequence, Union
+import logging
 
 import numpy as np
 
@@ -53,6 +54,7 @@ from fast_ticc.containers import results
 from fast_ticc import data_preparation
 from fast_ticc import main_loop
 
+LOG = logging.getLogger(__name__)
 
 def ticc_labels(data_series: np.ndarray,
                 window_size: int = 10,
@@ -63,7 +65,10 @@ def ticc_labels(data_series: np.ndarray,
                 min_meaningful_covariance: float = 0,
                 num_processors: int = 1,
                 min_cluster_size: int = 20,
-                biased_covariance: bool = False) -> results.SingleDataSeriesResult:
+                biased_covariance: bool = False,
+                initial_model: Optional[list[np.ndarray]]=None,
+                allow_model_updates: bool=True
+                ) -> results.SingleDataSeriesResult:
     """Compute TICC labels for a data series.
 
     This is the front end for running TICC.  This function computes
@@ -129,7 +134,8 @@ def ticc_labels(data_series: np.ndarray,
         window_size (int): Number of data points to stack together
             for window.  Defaults to 10.
         num_clusters (int): How many different labels to construct.
-            Defaults to 5.
+            Defaults to 5.  If you supply an initial model, this
+            value is ignored.
         sparsity_weight (float or NumPy array): Regularization term
             to encourage the solver to build sparse covariance matrices.
             Higher values of this parameter bias us toward inverse
@@ -153,7 +159,18 @@ def ticc_labels(data_series: np.ndarray,
             to reinitialize an empty cluster.  Defaults to 20.
         biased (bool): Whether to compute biased or unbiased covariance
             (i.e. divide by N or N-1).  Defaults to False (unbiased).
-
+        initial_model (list of NumPy arrays): Initial values for stacked 
+            covariance matrices.  Get this from the 'covariance_matrices'
+            member of the result of a previous TICC run.  Defaults to 
+            empty (initialize from data).  This is used when you want to
+            label new data with an existing model.  If you supply
+            an initial model, num_clusters is ignored.
+        allow_model_updates (bool): If False, the model will be considered
+            frozen and the algorithm will exit after one pass of labeling
+            the input data.  This is what you should choose if you are 
+            labeling new data with an existing model.  Defaults to True 
+            (perform full optimization as normal).
+            
     Returns:
         TICC results, including labels, Markov random fields, and information
         about the optimizer results.  See
@@ -171,6 +188,13 @@ def ticc_labels(data_series: np.ndarray,
     If you are certain that your BLAS implementation is single-threaded,
     you may be able to get faster execution by setting num_processors > 1.
     """
+
+    if initial_model and len(initial_model) != num_clusters:
+        LOG.debug("Setting num_clusters to %s from initial model.", len(initial_model))
+        num_clusters = len(initial_model)
+
+    if (not initial_model) and (not allow_model_updates):
+        raise ValueError("Empty initial model requires allow_model_updates=True.")
 
     params = arguments.UserArguments(
         window_size=window_size,
@@ -192,7 +216,12 @@ def ticc_labels(data_series: np.ndarray,
             "array.  Did you mean to call ticc_joint_labels instead?"
         )) from not_a_numpy_array
 
-    ticc_result = main_loop.fit_stacked_data(params, stacked_data)
+    if initial_model:
+        _verify_data_compatible_with_model(stacked_data, initial_model)
+
+    ticc_result = main_loop.fit_stacked_data(params, stacked_data, 
+                                             initial_model=initial_model,
+                                             allow_model_updates=allow_model_updates)
     ticc_result.point_labels = data_preparation.pad_missing_labels(ticc_result.point_labels,
                                                                    window_size)
     return ticc_result
@@ -207,7 +236,10 @@ def ticc_joint_labels(data_series: Sequence[np.ndarray],
                       min_meaningful_covariance: float = 0,
                       num_processors: int = 1,
                       min_cluster_size: int = 20,
-                      biased_covariance: bool = False) -> results.MultipleDataSeriesResult:
+                      biased_covariance: bool = False,
+                      initial_model: Optional[list[np.ndarray]]=None,
+                      allow_model_updates: bool=True
+                ) -> results.MultipleDataSeriesResult:
     """Compute TICC labels over several data series at once.
 
     This function is almost exactly like regular TICC, but instead of
@@ -278,7 +310,8 @@ def ticc_joint_labels(data_series: Sequence[np.ndarray],
         window_size (int): Number of data points to stack together
             for window.  Defaults to 10.
         num_clusters (int): How many different labels to construct.
-            Defaults to 5.
+            Defaults to 5.  This value is ignored if you supply a value
+            for initial_model.
         sparsity_weight (float or NumPy array): Regularization term
             to encourage the solver to build sparse covariance matrices.
             Higher values of this parameter bias us toward inverse
@@ -301,6 +334,17 @@ def ticc_joint_labels(data_series: Sequence[np.ndarray],
             to reinitialize an empty cluster.  Defaults to 20.
         biased (bool): Whether to compute biased or unbiased covariance
             (i.e. divide by N or N-1).  Defaults to False (unbiased).
+        initial_model (list of NumPy arrays): Initial values for stacked 
+            covariance matrices.  Get this from the 'covariance_matrices'
+            member of the result of a previous TICC run.  Defaults to 
+            empty (initialize from data).  This is used when you want to
+            label new data with an existing model.  If you supply
+            an initial model, num_clusters is ignored.
+        allow_model_updates (bool): If False, the model will be considered
+            frozen and the algorithm will exit after one pass of labeling
+            the input data.  This is what you should choose if you are 
+            labeling new data with an existing model.  Defaults to True 
+            (perform full optimization as normal).
 
     Returns:
         A list of TICC results, one for each input data series.  Point labels
@@ -312,6 +356,13 @@ def ticc_joint_labels(data_series: Sequence[np.ndarray],
     # traverse it multiple times, so make it a list.
     data_series = list(data_series)
 
+    if initial_model and len(initial_model) != num_clusters:
+        LOG.debug("Setting num_clusters to %s from initial model.", len(initial_model))
+        num_clusters = len(initial_model)
+
+    if (not initial_model) and (not allow_model_updates):
+        raise ValueError("Empty initial model requires allow_model_updates=True.")
+    
     try:
         combined_data_series = data_preparation.stack_training_data_multiple_series(
             data_series, window_size
@@ -322,6 +373,9 @@ def ticc_joint_labels(data_series: Sequence[np.ndarray],
             "(or other iterable) of 2D NumPy arrays.  Did you mean to call "
             "ticc_labels instead?"
         )) from not_a_list_of_numpy_arrays
+
+    if initial_model:
+        _verify_data_compatible_with_model(stacked_data, initial_model)
 
     stacked_data_sizes = [
         len(series) - window_size + 1
@@ -347,8 +401,10 @@ def ticc_joint_labels(data_series: Sequence[np.ndarray],
         "of inputted data series."
 
     # Here we go!  This will take a while.
-    master_result = main_loop.fit_stacked_data(args, combined_data_series)
-
+    master_result = main_loop.fit_stacked_data(args, combined_data_series, 
+                                               initial_model=initial_model,
+                                               allow_model_updates=allow_model_updates)
+    
     ticc_multi_result = _split_combined_result(master_result, stacked_data_sizes,
                                                data_series)
     return ticc_multi_result
