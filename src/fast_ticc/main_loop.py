@@ -43,7 +43,7 @@ import logging
 import multiprocessing
 import os
 
-from typing import List
+from typing import List, Optional
 
 import numpy as np
 
@@ -62,7 +62,8 @@ LOGGER = logging.getLogger(__name__)
 
 
 def fit_stacked_data(user_args: arguments.UserArguments,
-                     stacked_training_data: np.ndarray) -> results.SingleDataSeriesResult:
+                     stacked_training_data: np.ndarray,
+                     pretrained_model: Optional[results.TiccModel]=None) -> results.SingleDataSeriesResult:
     """Fit cluster labels to already-stacked data series.
 
     This is the TICC main loop.
@@ -79,22 +80,43 @@ def fit_stacked_data(user_args: arguments.UserArguments,
             Continue in this fashion all the way up to time
             t+(W-1).
 
+    Keyword Arguments:
+        pretrained_model (ticc.containers.results.TiccModel): If supplied, 
+            labels will be assigned to data using this model rather than 
+            one trained from scratch. Defaults to None.  You can get this 
+            object from the `trained_model` property of TICC results.
+
     Returns:
         ticc.containers.results.SingleDataSeriesResult containing assigned
         labels and Markov random fields
     """
 
-    assert user_args.iteration_limit > 0  # must have at least one iteration
-
-    num_data_points = stacked_training_data.shape[0]
-
-    current_model_state = model_state.ModelState.empty_model(
+    model = model_state.ModelState.empty_model(
         user_args, stacked_training_data)
-    current_model_state.point_labels = cluster_label_assignment.build_initial_clusters(
-        user_args.num_clusters, stacked_training_data
-    )
+    
+    if pretrained_model:
+        model.point_labels = cluster_label_assignment.label_with_pretrained_model(
+            pretrained_model, user_args, stacked_training_data
+        )
+        # This will update likelihoods and means
+        model = cluster_maintenance.update_all_cluster_statistics(
+            model, stacked_training_data
+        )
+    else:
+        model.point_labels = cluster_label_assignment.build_initial_clusters(
+            user_args.num_clusters, stacked_training_data
+        )
+        model = _optimize_model(model, stacked_training_data)
+        
+    return _package_results(model, user_args, stacked_training_data, pretrained_model)
 
-    current_model_state.arguments.print()
+
+def _optimize_model(model: model_state.ModelState,
+                    stacked_training_data: np.ndarray) -> model_state.ModelState:
+    
+    
+    assert model.arguments.iteration_limit > 0  # must have at least one iteration
+    model.arguments.print()
 
     # We will use this to detect convergence
     previous_iteration_point_labels = None
@@ -102,35 +124,35 @@ def fit_stacked_data(user_args: arguments.UserArguments,
     # The context manager syntax for multiprocessing pools is convenient
     # but causes problems with computing test coverage.  We initialize
     # and close it manually to let pycov/coverage do their thing.
-    task_pool = _init_task_pool(current_model_state.arguments.num_processors)
+    task_pool = _init_task_pool(model.arguments.num_processors)
 
-    for current_iteration in range(current_model_state.arguments.iteration_limit):
+    for current_iteration in range(model.arguments.iteration_limit):
         LOGGER.info("TICC: Beginning iteration %d", current_iteration)
 
         if current_iteration > 0:
-            current_model_state = cluster_maintenance.repopulate_empty_clusters(
-                current_model_state)
+            model = cluster_maintenance.repopulate_empty_clusters(
+                model)
 
-        current_model_state = cluster_maintenance.update_all_cluster_statistics(
-            current_model_state, stacked_training_data
+        model = cluster_maintenance.update_all_cluster_statistics(
+            model, stacked_training_data
         )
 
-        current_model_state = graphical_lasso.optimize_markov_random_fields(
-            current_model_state, stacked_training_data, task_pool
+        model = graphical_lasso.optimize_markov_random_fields(
+            model, stacked_training_data, task_pool
         )
 
-        current_model_state = cluster_label_assignment.predict_cluster_labels(
-            current_model_state, stacked_training_data
+        model = cluster_label_assignment.predict_cluster_labels(
+            model, stacked_training_data
         )
 
         if (previous_iteration_point_labels ==
-                current_model_state.point_labels):
+                model.point_labels):
             LOGGER.info((
                 "Cluster assignments have converged. Optimization "
                 "complete."))
             break
         previous_iteration_point_labels = copy.copy(
-            current_model_state.point_labels)
+            model.point_labels)
         # end of main loop
 
     # This will trigger pycov/coverage's handlers to record test coverage
@@ -139,22 +161,22 @@ def fit_stacked_data(user_args: arguments.UserArguments,
 
     # Extract all the model statistics and build the derived results
 
-    bayesian_ic = cluster_metrics.bayesian_information_criterion(current_model_state)
+    bayesian_ic = cluster_metrics.bayesian_information_criterion(model)
     calinski_harabasz = cluster_metrics.calinski_harabasz_index(stacked_training_data,
-                                                                current_model_state)
+                                                                model)
 
     labels = [-1] * num_data_points
     for i in range(stacked_training_data.shape[0]):
-        labels[i] = current_model_state.point_labels[i]
+        labels[i] = model.point_labels[i]
 
 
     markov_random_fields = [
-        current_model_state.clusters[cluster_id].train_inverse
-        for cluster_id in range(current_model_state.arguments.num_clusters)
+        model.clusters[cluster_id].train_inverse
+        for cluster_id in range(model.arguments.num_clusters)
     ]
 
     cluster_log_likelihood = _compute_log_likelihood_by_cluster(
-        stacked_training_data, current_model_state
+        stacked_training_data, model
     )
 
     # make this forward-facing
@@ -178,10 +200,16 @@ def fit_stacked_data(user_args: arguments.UserArguments,
     # front end will take care of splitting this result into components
     # that correspond to the individual input series.
 
+    final_model = results.TiccModel(
+        window_size=model.arguments.window_size,
+        inverse_covariance=markov_random_fields,
+        per_cluster_mean=[cluster.stacked_data_mean for cluster in model.clusters]
+    )
+
     return results.SingleDataSeriesResult(
         bayesian_information_criterion=bayesian_ic,
         calinski_harabasz_index=calinski_harabasz,
-        label_assignment_cost=current_model_state.label_assignment_cost,
+        label_assignment_cost=model.label_assignment_cost,
         overall_log_likelihood=overall_log_likelihood,
         overall_log_likelihood_mean=overall_log_likelihood_mean,
         overall_log_likelihood_median=overall_log_likelihood_median,
@@ -189,9 +217,10 @@ def fit_stacked_data(user_args: arguments.UserArguments,
         cluster_log_likelihood_median=cluster_log_likelihood_median,
         all_log_likelihood=all_log_likelihood,
         markov_random_fields=markov_random_fields,
-        num_clusters=current_model_state.arguments.num_clusters,
+        num_clusters=model.arguments.num_clusters,
         point_labels=labels,
-        window_size=current_model_state.arguments.window_size)
+        window_size=model.arguments.window_size,
+        trained_model=final_model)
 
 
 def _init_task_pool(num_processes: int) -> multiprocessing.Pool:

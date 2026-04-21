@@ -44,7 +44,7 @@ Be aware that the current implementation will not label the last
 ways to fix that.
 """
 
-from typing import List, Sequence, Union
+from typing import List, Optional, Sequence, Union
 
 import numpy as np
 
@@ -63,7 +63,9 @@ def ticc_labels(data_series: np.ndarray,
                 min_meaningful_covariance: float = 0,
                 num_processors: int = 1,
                 min_cluster_size: int = 20,
-                biased_covariance: bool = False) -> results.SingleDataSeriesResult:
+                biased_covariance: bool = False,
+                pretrained_model: Optional[results.TiccModel]=None
+                ) -> results.SingleDataSeriesResult:
     """Compute TICC labels for a data series.
 
     This is the front end for running TICC.  This function computes
@@ -153,7 +155,11 @@ def ticc_labels(data_series: np.ndarray,
             to reinitialize an empty cluster.  Defaults to 20.
         biased (bool): Whether to compute biased or unbiased covariance
             (i.e. divide by N or N-1).  Defaults to False (unbiased).
-
+        pretrained_model (TiccModel): If supplied, labels will be assigned
+            to data using this model rather than one trained from scratch.
+            Defaults to None.  You can get this object from the 
+            `trained_model` property of TICC results.
+            
     Returns:
         TICC results, including labels, Markov random fields, and information
         about the optimizer results.  See
@@ -192,7 +198,7 @@ def ticc_labels(data_series: np.ndarray,
             "array.  Did you mean to call ticc_joint_labels instead?"
         )) from not_a_numpy_array
 
-    ticc_result = main_loop.fit_stacked_data(params, stacked_data)
+    ticc_result = main_loop.fit_stacked_data(params, stacked_data, pretrained_model=pretrained_model)
     ticc_result.point_labels = data_preparation.pad_missing_labels(ticc_result.point_labels,
                                                                    window_size)
     return ticc_result
@@ -207,7 +213,9 @@ def ticc_joint_labels(data_series: Sequence[np.ndarray],
                       min_meaningful_covariance: float = 0,
                       num_processors: int = 1,
                       min_cluster_size: int = 20,
-                      biased_covariance: bool = False) -> results.MultipleDataSeriesResult:
+                      biased_covariance: bool = False,
+                      pretrained_model: Optional[results.TiccModel] = None
+                      ) -> results.MultipleDataSeriesResult:
     """Compute TICC labels over several data series at once.
 
     This function is almost exactly like regular TICC, but instead of
@@ -301,6 +309,10 @@ def ticc_joint_labels(data_series: Sequence[np.ndarray],
             to reinitialize an empty cluster.  Defaults to 20.
         biased (bool): Whether to compute biased or unbiased covariance
             (i.e. divide by N or N-1).  Defaults to False (unbiased).
+        pretrained_model (TiccModel): If supplied, labels will be assigned
+            to data using this model rather than one trained from scratch.
+            Defaults to None.  You can get this object from the 
+            `trained_model` property of TICC results.
 
     Returns:
         A list of TICC results, one for each input data series.  Point labels
@@ -347,7 +359,7 @@ def ticc_joint_labels(data_series: Sequence[np.ndarray],
         "of inputted data series."
 
     # Here we go!  This will take a while.
-    master_result = main_loop.fit_stacked_data(args, combined_data_series)
+    master_result = main_loop.fit_stacked_data(args, combined_data_series, pretrained_model=pretrained_model)
 
     ticc_multi_result = _split_combined_result(master_result, stacked_data_sizes,
                                                data_series)
@@ -405,6 +417,7 @@ def _split_combined_result(master_result: results.SingleDataSeriesResult,
         overall_log_likelihood_median=master_result.overall_log_likelihood_median,
         cluster_log_likelihood_mean=master_result.cluster_log_likelihood_mean,
         cluster_log_likelihood_median=master_result.cluster_log_likelihood_median,
+        trained_model=master_result.trained_model
     )
 
     return ticc_multi_result
