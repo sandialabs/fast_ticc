@@ -1,0 +1,66 @@
+# This workflow will build and deploy the Frosted Tracks documentation.
+
+name: Publish Documentation
+
+on:
+    # Run on all pushes targeting the default branch (main).
+    push:
+        branches: ["main"]
+    pull_request:
+        branches: ["main"]
+
+    # This will allow us to run the workflow manually from the Actions tab
+    workflow_dispatch:
+
+
+# Set permissions of GITHUB_TOKEN to allow deployment to GH Pages
+permissions:
+    contents: read
+    pages: write
+    id-token: write
+
+# Allow only one concurrent deployment, skipping runs queued between the run in
+# progress and the latest queued.  However, do not cancel in-progress runs.
+concurrency:
+    group: "pages"
+    cancel-in-progress: false
+
+jobs:
+    # Step 1: Build the docs
+    build:
+        runs-on: ubuntu-latest
+        steps:
+            - name: Checkout
+              uses: actions/checkout@v6
+
+            - name: Set up Pages
+              uses: actions/configure-pages@v6
+
+            - name: Set up Python
+              uses: actions/setup-python@v6
+              with:
+                  python-version: '3.x'
+
+            - name: Build Documentation
+              run: |
+                  pip install -r docs/requirements.txt
+                  cd docs
+                  make html
+
+            - name: Upload Docs Artifact
+              uses: actions/upload-pages-artifact@v5
+              with:
+                path: docs/build/html/
+
+    # Step 2: Deploy the docs
+    deploy:
+        runs-on: ubuntu-latest
+        needs: build
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main' # Only run on pushes to main
+        environment:
+            name: github-pages
+            url: ${{ steps.deployment.outputs.page_url }}
+        steps:
+            - name: Deploy to GitHub Pages
+              id: deployment
+              uses: actions/deploy-pages@v5

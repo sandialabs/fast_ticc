@@ -41,7 +41,7 @@
 
 project = 'Fast TICC'
 copyright = (
-    "2023 National Technology and Engineering Solutions of Sandia, LLC "
+    "2026 National Technology and Engineering Solutions of Sandia, LLC "
     "(NTESS).  Under the terms of Contract DE-NA0003525 with NTESS, the "
     "U.S. Government retains certain rights in this software."
 )
@@ -51,7 +51,7 @@ release = '1.0.0'
 # -- General configuration ---------------------------------------------------
 # https://www.sphinx-doc.org/en/master/usage/configuration.html#general-configuration
 
-extensions = ['sphinx.ext.napoleon', 'sphinx_rtd_theme']
+extensions = ['sphinx.ext.napoleon']
 
 templates_path = ['_templates']
 exclude_patterns = []
