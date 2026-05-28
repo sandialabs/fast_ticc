@@ -38,6 +38,7 @@ iteration to identify and fix that situation before the algorithm can
 crash.
 """
 
+import copy
 import logging
 import random
 from typing import List, Tuple
@@ -97,8 +98,8 @@ def repopulate_empty_clusters(
     LOGGER.info("Need to repopulate %d cluster(s): %s",
                 len(clusters_to_repopulate), clusters_to_repopulate)
 
-    new_model = model.shallow_copy()
-    new_model.clusters = [cluster.deep_copy() for cluster in model.clusters]
+    new_model = copy.copy(model)
+    new_model.clusters = [copy.deepcopy(cluster) for cluster in model.clusters]
 
     # Draw from clusters with the largest spread (highest
     # covariance) to encourage diversity in the clustering
@@ -257,7 +258,7 @@ def update_cluster_member_data_statistics(cluster: model_state.ClusterParameters
     """
 
     assert cluster.size > 0, "Cluster needs at least one point assigned to it."
-    updated_cluster = cluster.shallow_copy()
+    updated_cluster = copy.copy(cluster)
     training_data_this_cluster = training_data[cluster.member_points, :]
 
     updated_cluster.empirical_covariance = np.cov(
@@ -299,7 +300,7 @@ def update_all_cluster_statistics(model: model_state.ModelState,
     for (point_id, cluster_id) in enumerate(model.point_labels):
         cluster_members[cluster_id].append(point_id)
 
-    updated_model = model.shallow_copy()
+    updated_model = copy.copy(model)
     for cluster_id in range(num_clusters):
         updated_model.clusters[cluster_id] = update_cluster_member_data_statistics(
             updated_model.clusters[cluster_id],

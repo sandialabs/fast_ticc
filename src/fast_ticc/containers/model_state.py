@@ -143,52 +143,6 @@ class ClusterParameters:
             log_determinant=None
         )
 
-    def shallow_copy(self) -> "ClusterParameters":
-        """Shallow copy of cluster parameters
-
-        As a shallow copy, the non-atomic data items in the result
-        (the member point lists and forward/inverse covariance
-        matrices) are just pointers to the originals.  If you modify
-        them, you will also modify the originals.
-
-        Returns:
-            Shallow copy of cluster parameters
-        """
-
-        return ClusterParameters(
-            computed_covariance=self.computed_covariance,
-            empirical_covariance=self.empirical_covariance,
-            graphical_lasso_cost=self.graphical_lasso_cost,
-            inverse_covariance=self.inverse_covariance,
-            log_determinant=self.log_determinant,
-            member_points=self.member_points,
-            stacked_data_mean=self.stacked_data_mean,
-            train_inverse=self.train_inverse
-        )
-
-    def deep_copy(self) -> "ClusterParameters":
-        """Deep copy of cluster parameters
-
-        As a deep copy, the return value from this function can be
-        modified without affecting the original.
-
-        No arguments.
-
-        Returns:
-            New copy of cluster parameters
-        """
-        return ClusterParameters(
-            computed_covariance=np.copy(self.computed_covariance),
-            empirical_covariance=np.copy(self.empirical_covariance),
-            graphical_lasso_cost=self.graphical_lasso_cost,
-            inverse_covariance=np.copy(self.inverse_covariance),
-            log_determinant=self.log_determinant,
-            member_points=list(self.member_points),
-            stacked_data_mean=np.copy(self.stacked_data_mean),
-            train_inverse=np.copy(self.train_inverse)
-        )
-
-
 class ModelState:
     """All state information for a TICC model in progress.
 
@@ -289,48 +243,3 @@ class ModelState:
         if new_labels != self._point_labels:
             self._point_labels = new_labels
             self._update_cluster_membership()
-
-    def shallow_copy(self) -> "ModelState":
-        """Create a shallow copy of this model's state.
-
-        Since this is a shallow copy, the arguments, cluster parameters,
-        log likelihood data, and training data are just pointers to the
-        originals.  Modifying them will modify the original as well.
-
-        No arguments.
-
-        Returns:
-            Shallow copy of model state.
-        """
-
-        return ModelState(
-            arguments=self.arguments,
-            clusters=list(self.clusters),
-            label_assignment_cost=self.label_assignment_cost,
-            point_labels=self._point_labels,
-            point_log_likelihood=self.point_log_likelihood,
-            stacked_training_data=self.stacked_training_data
-        )
-
-    def deep_copy(self) -> "ModelState":
-        """Create a deep copy of this model's state.
-
-        Since this is a deep copy, all data will be copied and none will be
-        shared with the original.  You can modify the return value without
-        affecting the model that you copied.
-
-        No arguments.
-
-        Returns:
-            New copy of model state.
-        """
-
-        new_clusters = [cluster.deep_copy() for cluster in self.clusters]
-        return ModelState(
-            arguments=self.arguments.deep_copy(),
-            clusters=new_clusters,
-            label_assignment_cost=self.label_assignment_cost,
-            point_labels=list(self._point_labels),
-            point_log_likelihood=np.copy(self.point_log_likelihood),
-            stacked_training_data=np.copy(self.stacked_training_data)
-        )

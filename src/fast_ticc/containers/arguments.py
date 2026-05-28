@@ -118,38 +118,6 @@ class UserArguments:
                self.window_size)
 
 
-    def shallow_copy(self) -> "UserArguments":
-        """Return a new copy of the user arguments
-
-        Although this is a shallow copy, all the members are scalars,
-        so there's no upstream modification possible.
-
-        Returns:
-            New UserArguments instance with same contents
-        """
-        return UserArguments(
-            sparsity_weight=self.sparsity_weight,
-            iteration_limit=self.iteration_limit,
-            label_switching_cost=self.label_switching_cost,
-            min_cluster_size=self.min_cluster_size,
-            min_meaningful_covariance=self.min_meaningful_covariance,
-            num_clusters=self.num_clusters,
-            num_processors=self.num_processors,
-            biased_covariance=self.biased_covariance,
-            window_size=self.window_size)
-
-
-    def deep_copy(self):
-        """Return a new copy of the user arguments
-
-        Returns:
-            New UserArguments instance with same contents
-        """
-        # Since all the arguments are scalars, there's no difference
-        # between a shallow and a deep copy.
-        return self.shallow_copy()
-
-
 @dataclasses.dataclass
 class ADMMArguments:
     """Convenience container for ADMM arguments
@@ -179,38 +147,3 @@ class ADMMArguments:
     relative_tolerance: float
     max_iterations: int
     verbose: bool
-
-    def shallow_copy(self) -> "ADMMArguments":
-        """Return a new copy of the ADMM arguments
-
-        Although this is a shallow copy, all the members are scalars or
-        pointers to opaque objects, so there's no upstream modification
-        possible.
-
-        Returns:
-            New ADMMArguments instance with same contents
-        """
-        return ADMMArguments(
-            window_size=self.window_size,
-            num_data_series=self.num_data_series,
-            rho=self.rho,
-            rho_update=self.rho_update,
-            sparsity_weight=self.sparsity_weight,
-            absolute_tolerance=self.absolute_tolerance,
-            relative_tolerance=self.relative_tolerance,
-            max_iterations=self.max_iterations,
-            verbose=self.verbose
-        )
-
-    def deep_copy(self) -> "ADMMArguments":
-        """Return a new copy of the ADMM arguments
-
-        Since all the members of this class are scalars or pointers to opaque
-        objects, this is the same as a shallow copy.
-
-        Returns:
-            New ADMMArguments instance with same contents
-        """
-        # Since all the arguments are scalars, there's no difference
-        # between a shallow and a deep copy.
-        return self.shallow_copy()
