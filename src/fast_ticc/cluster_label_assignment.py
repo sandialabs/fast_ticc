@@ -1,4 +1,4 @@
-### Copyright 2023 National Technology & Engineering Solutions of Sandia,
+### Copyright 2023-2026 National Technology & Engineering Solutions of Sandia,
 ### LLC (NTESS). Under the terms of Contract DE-NA0003525 with NTESS, the
 ### U.S. Government retains certain rights in this software.
 ###
@@ -32,6 +32,7 @@
 
 """All math related to computing cluster labels in TICC."""
 
+import copy
 import logging
 from typing import Tuple, List
 import numpy as np
@@ -77,8 +78,8 @@ def predict_cluster_labels(model: model_state.ModelState,
         label_switching_cost=model.arguments.label_switching_cost
     )
 
-    new_model = model.shallow_copy()
-    new_model.clusters = [cluster.deep_copy() for cluster in new_model.clusters]
+    new_model = copy.copy(model)
+    new_model.clusters = [copy.deepcopy(cluster) for cluster in new_model.clusters]
     new_model.point_labels = new_labels
     new_model.label_assignment_cost = cost
 

@@ -1,4 +1,4 @@
-### Copyright 2023 National Technology & Engineering Solutions of Sandia,
+### Copyright 2023-2026 National Technology & Engineering Solutions of Sandia,
 ### LLC (NTESS). Under the terms of Contract DE-NA0003525 with NTESS, the
 ### U.S. Government retains certain rights in this software.
 ###
@@ -33,6 +33,7 @@
 """Functions for solving the TICC graphical lasso problem.
    Supports parallelism where available."""
 
+import copy
 import logging
 import multiprocessing
 
@@ -157,7 +158,7 @@ def _retrieve_optimization_results(model: model_state.ModelState,
             _update_cluster_covariances(model, cluster, admm_result.theta)
         )
 
-    model = model.shallow_copy()
+    model = copy.copy(model)
     model.clusters = updated_clusters
     return model
 
@@ -188,7 +189,7 @@ def _update_cluster_covariances(model: model_state.ModelState,
     optimized_inverse_covariance = _reconstruct_optimized_matrix(model, admm_result)
     computed_covariance = np.linalg.inv(optimized_inverse_covariance)
 
-    updated_cluster = cluster.shallow_copy()
+    updated_cluster = copy.copy(cluster)
     updated_cluster.computed_covariance = computed_covariance
     updated_cluster.train_inverse = optimized_inverse_covariance
     updated_cluster.log_determinant = np.log(
@@ -293,7 +294,7 @@ def _update_cluster_statistics(cluster: model_state.ClusterParameters,
                 "This shouldn't happen."
                 ))
 
-    updated_cluster = cluster.shallow_copy()
+    updated_cluster = copy.copy(cluster)
     training_data_this_cluster = training_data[cluster.member_points, :]
     updated_cluster.stacked_data_mean = np.mean(training_data_this_cluster, axis=0)
     updated_cluster.empirical_covariance = np.cov(
