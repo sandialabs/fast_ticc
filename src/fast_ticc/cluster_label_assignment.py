@@ -89,7 +89,7 @@ def predict_cluster_labels(model: model_state.ModelState,
 @numba_guard.njit(parallel=False)
 def assign_point_cluster_labels(
         label_assignment_cost: np.ndarray,
-        label_switching_cost: float
+        label_switching_cost: float|np.ndarray
         ) -> Tuple[List[int], float]:
     """Compute point cluster labels given cluster parameters.
 
@@ -137,24 +137,23 @@ def assign_point_cluster_labels(
     future_cost_vals = np.zeros(label_assignment_cost.shape)
     path_matrix = np.zeros(label_assignment_cost.shape, dtype=np.uint16)
 
-
-    label_switching_cost = np.zeros(shape=(num_points,)) + label_switching_cost
+    costs = np.zeros(shape=(num_points,)) + label_switching_cost
 
     for i in range(num_points-2, -1, -1):
         # we're computing "What state should I step into, going from observation
         # i to j, to get the best cost in the future?"
-        total_vals = future_cost_vals[i+1] + label_assignment_cost[i+1] + label_switching_cost[i]
+        total_vals = future_cost_vals[i+1] + label_assignment_cost[i+1] + costs[i]
         arg_general_min = np.argmin(total_vals)
 
         for cluster in range(num_clusters):
             # keeping the cluster the same does NOT incur a label switching cost
             # The optimal is either the previous minimum OR the discounted option
-            if total_vals[arg_general_min] < total_vals[cluster] - label_switching_cost[i]:
+            if total_vals[arg_general_min] < total_vals[cluster] - costs[i]:
                 path_matrix[i, cluster] = arg_general_min
                 future_cost_vals[i, cluster] = total_vals[arg_general_min]
             else:
                 path_matrix[i, cluster] = cluster
-                future_cost_vals[i, cluster] = total_vals[cluster] - label_switching_cost[i]
+                future_cost_vals[i, cluster] = total_vals[cluster] - costs[i]
 
 
     # Read off the best path from the path matrix
