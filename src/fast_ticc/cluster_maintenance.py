@@ -86,6 +86,9 @@ def repopulate_empty_clusters(
         this will be the same as the input.
     """
 
+    if not model.arguments:
+        raise RuntimeError("repopulate_empty_clusters: model.arguments must not be None")
+
     clusters_to_repopulate = set()
     for (cluster_id, cluster) in enumerate(model.clusters):
         if cluster.size < 2:
@@ -141,6 +144,9 @@ def _find_point_donor(model: model_state.ModelState,
         RuntimeError: No suitable donor cluster could be found
     """
 
+    if not model.arguments:
+        raise RuntimeError("_find_point_donor: model.arguments must not be None")
+
     min_cluster_size = model.arguments.min_cluster_size
     remaining_donors = list(potential_donor_ids)
     while len(remaining_donors) > 0:
@@ -187,6 +193,9 @@ def _find_ranked_donor_cluster_ids(model: model_state.ModelState) -> List[int]:
         List of available donor cluster IDs
     """
 
+    if not model.arguments:
+        raise RuntimeError("_find_ranked_donor_cluster_ids: model.arguments must not be None")
+
     potential_donor_ids = [i
                            for i in range(len(model.clusters))
                            if model.clusters[i].size >= 2 * model.arguments.min_cluster_size]
@@ -217,6 +226,10 @@ def _move_random_points(model: model_state.ModelState,
     Returns:
         New list of point labels for all clusters
     """
+
+
+    if not model.arguments:
+        raise RuntimeError("_move_random_points: model.arguments must not be None")
 
     available_point_ids = model.clusters[donor_cluster_id].member_points
     donated_point_indices = random.sample(range(len(available_point_ids)),
@@ -294,6 +307,9 @@ def update_all_cluster_statistics(model: model_state.ModelState,
         New model state (shallow copy of previous state) with updated
         clusters
     """
+
+    if not model.arguments:
+        raise RuntimeError("update_all_cluster_statistics: model.arguments must not be None")
 
     num_clusters = model.arguments.num_clusters
     cluster_members = {cluster_id: [] for cluster_id in range(num_clusters)}

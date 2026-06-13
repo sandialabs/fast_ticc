@@ -57,6 +57,8 @@ from fast_ticc.containers import arguments
 from fast_ticc.containers import model_state
 from fast_ticc.containers import results
 
+# We need this to correctly type hint multiprocessing.Pool
+from multiprocessing.pool import Pool as mp_Pool
 
 LOGGER = logging.getLogger(__name__)
 
@@ -161,7 +163,7 @@ def fit_stacked_data(user_args: arguments.UserArguments,
     all_log_likelihood = list(itertools.chain(*cluster_log_likelihood))
 
     overall_log_likelihood = np.sum(all_log_likelihood)
-    overall_log_likelihood_mean = np.mean(all_log_likelihood)
+    overall_log_likelihood_mean = float(np.mean(all_log_likelihood))
     overall_log_likelihood_median = np.median(all_log_likelihood)
     cluster_log_likelihood_mean = np.array([
         np.mean(single_cluster_log_likelihood)
@@ -194,7 +196,7 @@ def fit_stacked_data(user_args: arguments.UserArguments,
         window_size=current_model_state.arguments.window_size)
 
 
-def _init_task_pool(num_processes: int) -> multiprocessing.Pool:
+def _init_task_pool(num_processes: int) -> mp_Pool:
     """Instantiate a task pool for multiprocessing
 
     When benchmarking or debugging, we might want to force the
@@ -241,18 +243,22 @@ def _init_task_pool(num_processes: int) -> multiprocessing.Pool:
 
 
 def _compute_log_likelihood_by_cluster(stacked_training_data: np.ndarray,
-                                       model: model_state.ModelState) -> List[np.ndarray]:
+                                       model: model_state.ModelState) -> list[list[float]]:
     """Compute final log likelihood values for each cluster's data
 
     For each cluster, build a list containing the log likelihood values for
     that cluster's constituent points.
+
+    This supports computing per-cluster statistics about log likelihood.  This
+    data structure is NOT intended as a user-facing index for log likelihood per
+    cluster.
 
     Arguments:
         stacked_training_data (NumPy array): Training data for TICC
         model (TICC model state): Final trained model
 
     Returns:
-        List of NumPy arrays, one per cluster.  Each NumPy array contains
+        List of list of floats, one per cluster.  Each list contains
         the log likelihood values for its corresponding cluster's points.
     """
 
