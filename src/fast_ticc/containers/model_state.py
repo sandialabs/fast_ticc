@@ -45,6 +45,11 @@ import numpy as np
 
 from fast_ticc.containers import arguments as arg_containers
 
+__all__ = [
+    "ClusterParameters",
+    "ModelState",
+]
+
 class ClusterParameters:
     """Container for TICC parameters for a single cluster
 
@@ -69,14 +74,15 @@ class ClusterParameters:
         """
 
     def __init__(self,
-                 computed_covariance: Optional[np.ndarray] = None,
-                 empirical_covariance: Optional[np.ndarray] = None,
-                 graphical_lasso_cost: Optional[float] = None,
-                 inverse_covariance: Optional[np.ndarray] = None,
-                 log_determinant: Optional[np.ndarray] = None,
-                 member_points: Optional[List[int]] = None,
-                 stacked_data_mean: Optional[np.ndarray] = None,
-                 train_inverse: Optional[np.ndarray] = None,
+                 *, # All of these should be supplied by keyword
+                 computed_covariance: np.ndarray,
+                 empirical_covariance: np.ndarray,
+                 graphical_lasso_cost: float,
+                 inverse_covariance: np.ndarray,
+                 log_determinant: float,
+                 member_points: list[int],
+                 stacked_data_mean: np.ndarray,
+                 train_inverse: np.ndarray,
                  ):
 
         self.computed_covariance = computed_covariance
@@ -135,12 +141,13 @@ class ClusterParameters:
 
         return ClusterParameters(
             member_points=[],
-            computed_covariance=None,
-            stacked_data_mean=None,
-            empirical_covariance=None,
-            train_inverse=None,
-            inverse_covariance=None,
-            log_determinant=None
+            computed_covariance=np.array([]),
+            stacked_data_mean=np.array([]),
+            empirical_covariance=np.array([]),
+            train_inverse=np.array([]),
+            inverse_covariance=np.array([]),
+            log_determinant=0,
+            graphical_lasso_cost=0,
         )
 
 class ModelState:
@@ -172,12 +179,13 @@ class ModelState:
         """
 
     def __init__(self,
-                 arguments: Optional[arg_containers.UserArguments] = None,
-                 clusters: Optional[List[ClusterParameters]] = None,
-                 label_assignment_cost: Optional[float] = None,
-                 point_labels: Optional[List[int]] = None,
-                 point_log_likelihood: Optional[np.ndarray] = None,
-                 stacked_training_data: Optional[np.ndarray] = None):
+                 *, # all arguments are keyword-only
+                 arguments: arg_containers.UserArguments,
+                 clusters: list[ClusterParameters],
+                 label_assignment_cost: float,
+                 point_labels: list[int],
+                 point_log_likelihood: np.ndarray,
+                 stacked_training_data: np.ndarray):
 
         self.arguments = arguments
         self.clusters = clusters
@@ -209,12 +217,17 @@ class ModelState:
             ClusterParameters.empty_cluster()
             for i in range(user_args.num_clusters)
             ]
+        empty_point_labels = list()
         return ModelState(arguments=user_args,
                           clusters=empty_cluster_info,
+                          label_assignment_cost=-1,
+                          point_labels=empty_point_labels,
+                          point_log_likelihood=np.array([]),
                           stacked_training_data=stacked_training_data)
 
 
     def _update_cluster_membership(self):
+        assert self.clusters is not None
         if (self._point_labels is None or len(self._point_labels) == 0):
             for cluster in self.clusters:
                 cluster.member_points = []
@@ -224,6 +237,7 @@ class ModelState:
                 members[cluster_id].append(point_id)
             # We have to use range(num_clusters) here in order to pick up
             # clusters with no points in them.
+            assert self.arguments is not None
             for cluster_id in range(self.arguments.num_clusters):
                 this_cluster_members = members[cluster_id]
                 self.clusters[cluster_id].member_points = this_cluster_members

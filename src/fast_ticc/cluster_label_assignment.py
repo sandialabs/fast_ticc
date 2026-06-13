@@ -73,6 +73,9 @@ def predict_cluster_labels(model: model_state.ModelState,
     # the more it costs to assign to that cluster
     label_assignment_cost = - log_likelihood
 
+    if not model.arguments:
+        raise RuntimeError("predict_cluster_labels: model_arguments must not be None.")
+
     (new_labels, cost) = assign_point_cluster_labels(
         label_assignment_cost=label_assignment_cost,
         label_switching_cost=model.arguments.label_switching_cost

@@ -100,8 +100,8 @@ class SingleDataSeriesResult:
     overall_log_likelihood: float
     overall_log_likelihood_mean: float
     overall_log_likelihood_median: float
-    cluster_log_likelihood_mean: List[float]
-    cluster_log_likelihood_median: List[float]
+    cluster_log_likelihood_mean: np.ndarray
+    cluster_log_likelihood_median: np.ndarray
     markov_random_fields: List[np.ndarray]
     num_clusters: int
     point_labels: List[int]
@@ -183,8 +183,8 @@ class MultipleDataSeriesResult:
     all_log_likelihood: List[float]
     overall_log_likelihood_mean: float
     overall_log_likelihood_median: float
-    cluster_log_likelihood_mean: List[float]
-    cluster_log_likelihood_median: List[float]
+    cluster_log_likelihood_mean: np.ndarray
+    cluster_log_likelihood_median: np.ndarray
     num_clusters: int
     window_size: int
 

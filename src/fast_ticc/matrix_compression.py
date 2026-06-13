@@ -159,7 +159,7 @@ def reinflate_matrix(compressed_utri: np.ndarray) -> np.ndarray:
 
 
 @functools.cache
-def _upper_triangle_indices(size: int) -> Tuple[List[int], List[int]]:
+def _upper_triangle_indices(size: int) -> tuple[np.ndarray, np.ndarray]:
     """Caching version of NumPy triu_indices()
 
     Nothing fancy here, just a wrapper to let functools
@@ -170,7 +170,8 @@ def _upper_triangle_indices(size: int) -> Tuple[List[int], List[int]]:
 
     Returns:
         (row_indices, column_indices), where zip(row_indices, column_indices)
-        gives the locations of all the elements in the matrix's upper triangle
+        gives the locations of all the elements in the matrix's upper triangle.
+        Both sets of indices are 1D NumPy arrays of integers.
     """
 
     return np.triu_indices(size)

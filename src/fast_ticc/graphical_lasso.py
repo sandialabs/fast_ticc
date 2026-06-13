@@ -37,7 +37,10 @@ import copy
 import logging
 import multiprocessing
 
-from typing import List, Union
+# We need these for type hints because of how Python implements Pool
+from multiprocessing.pool import ApplyResult, Pool
+
+from typing import List, TypeAlias, Union
 
 import numpy as np
 
@@ -45,15 +48,14 @@ from fast_ticc import admm
 from fast_ticc import matrix_compression
 from fast_ticc.containers import model_state
 
-
-TaskList = List[multiprocessing.pool.AsyncResult]
+TaskList: TypeAlias = list[tuple[int, ApplyResult]]
 
 LOGGER = logging.getLogger(__name__)
 
 
 def optimize_markov_random_fields(model: model_state.ModelState,
                                   stacked_training_data: np.ndarray,
-                                  pool: multiprocessing.Pool
+                                  pool: Pool
                                   ) -> model_state.ModelState:
     """Solve the TICC Graphical Lasso problem
 
@@ -81,13 +83,14 @@ def optimize_markov_random_fields(model: model_state.ModelState,
 
     # Fire off the task to compute a new optimal Markov random field
     #
-    optimization_tasks = [None] * model.arguments.num_clusters
+    optimization_tasks: TaskList = []
     for cluster_id in range(model.arguments.num_clusters):
-        optimization_tasks[cluster_id] = _setup_optimization_task(model.clusters[cluster_id],
-                                                                  num_time_series,
-                                                                  model.arguments.window_size,
-                                                                  model.arguments.sparsity_weight,
-                                                                  pool)
+        task = _setup_optimization_task(model.clusters[cluster_id],
+                                        num_time_series,
+                                        model.arguments.window_size,
+                                        model.arguments.sparsity_weight,
+                                        pool)
+        optimization_tasks.append((cluster_id, task))
 
 
     #
@@ -151,11 +154,11 @@ def _retrieve_optimization_results(model: model_state.ModelState,
     """
 
     updated_clusters = []
-    for (cluster, optimization_task) in zip(model.clusters, optimization_tasks):
+    for (cluster_id, optimization_task) in optimization_tasks:
         assert optimization_task is not None
         admm_result = optimization_task.get()
         updated_clusters.append(
-            _update_cluster_covariances(model, cluster, admm_result.theta)
+            _update_cluster_covariances(model, model.clusters[cluster_id], admm_result.theta)
         )
 
     model = copy.copy(model)
@@ -229,7 +232,7 @@ def _setup_optimization_task(cluster: model_state.ClusterParameters,
                              num_data_series: int,
                              window_size: int,
                              density_penalty: Union[float, np.ndarray],
-                             pool: multiprocessing.pool.Pool) -> multiprocessing.pool.AsyncResult:
+                             pool: Pool) -> ApplyResult:
     """Dispatch an optimization task to our worker pool
 
     We run all of the ADMM solvers that optimize the values for
