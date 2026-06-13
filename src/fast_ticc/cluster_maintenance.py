@@ -1,4 +1,4 @@
-# Copyright 2023 National Technology & Engineering Solutions of Sandia,
+# Copyright 2023-2026 National Technology & Engineering Solutions of Sandia,
 # LLC (NTESS). Under the terms of Contract DE-NA0003525 with NTESS, the
 # U.S. Government retains certain rights in this software.
 ###
@@ -38,6 +38,7 @@ iteration to identify and fix that situation before the algorithm can
 crash.
 """
 
+import copy
 import logging
 import random
 from typing import List, Tuple
@@ -85,6 +86,9 @@ def repopulate_empty_clusters(
         this will be the same as the input.
     """
 
+    if not model.arguments:
+        raise RuntimeError("repopulate_empty_clusters: model.arguments must not be None")
+
     clusters_to_repopulate = set()
     for (cluster_id, cluster) in enumerate(model.clusters):
         if cluster.size < 2:
@@ -97,8 +101,8 @@ def repopulate_empty_clusters(
     LOGGER.info("Need to repopulate %d cluster(s): %s",
                 len(clusters_to_repopulate), clusters_to_repopulate)
 
-    new_model = model.shallow_copy()
-    new_model.clusters = [cluster.deep_copy() for cluster in model.clusters]
+    new_model = copy.copy(model)
+    new_model.clusters = [copy.deepcopy(cluster) for cluster in model.clusters]
 
     # Draw from clusters with the largest spread (highest
     # covariance) to encourage diversity in the clustering
@@ -139,6 +143,9 @@ def _find_point_donor(model: model_state.ModelState,
     Raises:
         RuntimeError: No suitable donor cluster could be found
     """
+
+    if not model.arguments:
+        raise RuntimeError("_find_point_donor: model.arguments must not be None")
 
     min_cluster_size = model.arguments.min_cluster_size
     remaining_donors = list(potential_donor_ids)
@@ -186,6 +193,9 @@ def _find_ranked_donor_cluster_ids(model: model_state.ModelState) -> List[int]:
         List of available donor cluster IDs
     """
 
+    if not model.arguments:
+        raise RuntimeError("_find_ranked_donor_cluster_ids: model.arguments must not be None")
+
     potential_donor_ids = [i
                            for i in range(len(model.clusters))
                            if model.clusters[i].size >= 2 * model.arguments.min_cluster_size]
@@ -216,6 +226,10 @@ def _move_random_points(model: model_state.ModelState,
     Returns:
         New list of point labels for all clusters
     """
+
+
+    if not model.arguments:
+        raise RuntimeError("_move_random_points: model.arguments must not be None")
 
     available_point_ids = model.clusters[donor_cluster_id].member_points
     donated_point_indices = random.sample(range(len(available_point_ids)),
@@ -257,7 +271,7 @@ def update_cluster_member_data_statistics(cluster: model_state.ClusterParameters
     """
 
     assert cluster.size > 0, "Cluster needs at least one point assigned to it."
-    updated_cluster = cluster.shallow_copy()
+    updated_cluster = copy.copy(cluster)
     training_data_this_cluster = training_data[cluster.member_points, :]
 
     updated_cluster.empirical_covariance = np.cov(
@@ -294,12 +308,15 @@ def update_all_cluster_statistics(model: model_state.ModelState,
         clusters
     """
 
+    if not model.arguments:
+        raise RuntimeError("update_all_cluster_statistics: model.arguments must not be None")
+
     num_clusters = model.arguments.num_clusters
     cluster_members = {cluster_id: [] for cluster_id in range(num_clusters)}
     for (point_id, cluster_id) in enumerate(model.point_labels):
         cluster_members[cluster_id].append(point_id)
 
-    updated_model = model.shallow_copy()
+    updated_model = copy.copy(model)
     for cluster_id in range(num_clusters):
         updated_model.clusters[cluster_id] = update_cluster_member_data_statistics(
             updated_model.clusters[cluster_id],

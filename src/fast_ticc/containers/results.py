@@ -1,4 +1,4 @@
-### Copyright 2023 National Technology & Engineering Solutions of Sandia,
+### Copyright 2023-2026 National Technology & Engineering Solutions of Sandia,
 ### LLC (NTESS). Under the terms of Contract DE-NA0003525 with NTESS, the
 ### U.S. Government retains certain rights in this software.
 ###
@@ -129,8 +129,8 @@ class SingleDataSeriesResult:
     overall_log_likelihood: float
     overall_log_likelihood_mean: float
     overall_log_likelihood_median: float
-    cluster_log_likelihood_mean: List[float]
-    cluster_log_likelihood_median: List[float]
+    cluster_log_likelihood_mean: np.ndarray
+    cluster_log_likelihood_median: np.ndarray
     markov_random_fields: List[np.ndarray]
     num_clusters: int
     point_labels: List[int]
@@ -215,8 +215,8 @@ class MultipleDataSeriesResult:
     all_log_likelihood: List[float]
     overall_log_likelihood_mean: float
     overall_log_likelihood_median: float
-    cluster_log_likelihood_mean: List[float]
-    cluster_log_likelihood_median: List[float]
+    cluster_log_likelihood_mean: np.ndarray
+    cluster_log_likelihood_median: np.ndarray
     num_clusters: int
     window_size: int
     trained_model: TiccModel
