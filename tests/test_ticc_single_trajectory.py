@@ -35,6 +35,7 @@
 #
 
 from fast_ticc import front_end as ticc_front_end
+import fast_ticc
 import numpy as np
 import pytest
 import os
@@ -53,7 +54,7 @@ def computed_ticc_result(single_trajectory_features,
                          random_seed,
                          label_switching_cost,
                          num_clusters,
-                         window_size):
+                         window_size) -> fast_ticc.SingleDataSeriesResult:
 
     np.random.seed(random_seed)
     ticc_result = ticc_front_end.ticc_labels(
@@ -117,3 +118,27 @@ def test_ticc_single_trajectory_cluster_log_likelihood(computed_ticc_result, num
         "cluster_log_likelihood_median": computed_ticc_result.cluster_log_likelihood_median
     }
     num_regression.check(result_dict)
+
+
+def test_ticc_model_fully_populated(computed_ticc_result: fast_ticc.SingleDataSeriesResult,
+                                    window_size: int,
+                                    num_clusters: int,
+                                    single_trajectory_features: np.ndarray):
+    trained_model = computed_ticc_result.trained_model
+
+    num_points = single_trajectory_features.shape[0]
+    num_sensors = single_trajectory_features.shape[1]
+
+    nw = num_sensors * window_size
+
+    assert len(trained_model.per_cluster_mean) == num_clusters
+    assert len(trained_model.inverse_covariance) == num_clusters
+    assert trained_model.window_size == window_size
+    assert trained_model.num_clusters == num_clusters
+
+    for mean in trained_model.per_cluster_mean:
+        assert mean.shape == (nw,)
+
+    for inv_covariance in trained_model.inverse_covariance:
+        assert inv_covariance.shape == (nw, nw)
+
