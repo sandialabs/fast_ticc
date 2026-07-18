@@ -1,4 +1,4 @@
-# Copyright 2023 National Technology & Engineering Solutions of Sandia,
+# Copyright 2023-2026 National Technology & Engineering Solutions of Sandia,
 # LLC (NTESS). Under the terms of Contract DE-NA0003525 with NTESS, the
 # U.S. Government retains certain rights in this software.
 ###
@@ -65,65 +65,60 @@ def ticc_labels(data_series: np.ndarray,
                 min_meaningful_covariance: float = 0,
                 num_processors: int = 1,
                 min_cluster_size: int = 20,
-                biased_covariance: bool = False,
-                initial_model: Optional[list[np.ndarray]]=None,
-                allow_model_updates: bool=True
+                biased_covariance: bool = False
                 ) -> results.SingleDataSeriesResult:
     """Compute TICC labels for a data series.
 
-    This is the front end for running TICC.  This function computes
-    labels and inverse covariance matrices for a single set of
-    time-series data.
+    This is the front end for running TICC.  This function computes labels and
+    inverse covariance matrices for a single set of time-series data.
 
-    For implementation reasons, the first and last (window_size-1)/2
-    points in each data series will get the label -1 (no label).  If
-    you really need labels for those, you have two choices:
+    For implementation reasons, the first and last (window_size-1)/2 points in
+    each data series will get the label -1 (no label).  If you really need
+    labels for those, you have two choices:
 
-    1.  Use the first and last real labels (those with value 0 or higher)
-        for those points, or
-    2.  Extend your data by at least (window_size-1)/2 points at
-        both beginning and end
+    1.  Use the first and last real labels (those with value 0 or higher) for
+        those points, or
+    2.  Extend your data by at least (window_size-1)/2 points at both beginning
+        and end
 
     About the label-switching cost:
 
         One of the assumptions underlying TICC is that data series can be
-        divided into contiguous chunks that all exhibit similar behavior.
-        To encourage this, we penalize the solver whenever it switches labels
-        from one data point to the next.  The lower the lambda parameter, the
-        less expensive it is to change labels.
+        divided into contiguous chunks that all exhibit similar behavior. To
+        encourage this, we penalize the solver whenever it switches labels from
+        one data point to the next.  The lower the lambda parameter, the less
+        expensive it is to change labels.
 
         By default, we assume that this parameter (known as beta or "label
-        switching cost/penalty") is constant throughout the input data.  However,
-        if you are clustering multiple data series at once, you might want to
-        supply an array instead.  If the data series are independent, there's
-        no reason to expect that the label at the end of data series D would be
-        the same as the label at the beginning of data series D+1.  At that
-        specific point, beta should be zero.
+        switching cost/penalty") is constant throughout the input data.
+        However, if you are clustering multiple data series at once, you might
+        want to supply an array instead.  If the data series are independent,
+        there's no reason to expect that the label at the end of data series D
+        would be the same as the label at the beginning of data series D+1.  At
+        that specific point, beta should be zero.
 
         Here's how you do that.  Let's suppose that all of your already-stacked
-        data series are in the list `data_series`.  Each data series is a
-        NumPy array with dimensions (num_data_points, window_size * num_features).
+        data series are in the list `data_series`.  Each data series is a NumPy
+        array with dimensions (num_data_points, window_size * num_features).
 
         total_data_points = sum([data.shape[0] for data in data_series])
         label_switching_penalty = (
-            np.zeros(shape=(total_data_points,))
-            + constant_label_switching_penalty
-            )
-        end_of_latest_series = 0
-        for data in data_series[0:-1]:
+            np.zeros(shape=(total_data_points,)) +
+            constant_label_switching_penalty )
+        end_of_latest_series = 0 for data in data_series[0:-1]:
             end_of_latest_series += data.shape[0]
             label_switching_penalty[end_of_latest_series] = 0
 
     About the covariance sparsity parameter:
 
-        In the paper, this parameter (called lambda) is described as a
-        constant that gets turned into an NW x NW matrix.  However, like
-        the label-switching cost, you are free to supply something more
-        complex if you know more about which entries in the Markov random
-        field should be more or less expensive.
+        In the paper, this parameter (called lambda) is described as a constant
+        that gets turned into an NW x NW matrix.  However, like the
+        label-switching cost, you are free to supply something more complex if
+        you know more about which entries in the Markov random field should be
+        more or less expensive.
 
-        If you want to use the default (constant value), pass in a float.
-        If you want to roll your own, pass in an NW x NW NumPy array.
+        If you want to use the default (constant value), pass in a float. If you
+        want to roll your own, pass in an NW x NW NumPy array.
 
     Arguments:
         data_series (NumPy array): Data points for which you want labels.
@@ -137,21 +132,20 @@ def ticc_labels(data_series: np.ndarray,
             Defaults to 5.  If you supply an initial model, this
             value is ignored.
         sparsity_weight (float or NumPy array): Regularization term
-            to encourage the solver to build sparse covariance matrices.
-            Higher values of this parameter bias us toward inverse
-            covariance matrices with fewer non-zero entries.  This parameter
-            is named lambda in the TICC paper.  That's a reserved word in
-            Python, hence the different name.  Defaults to 0.11.  See above
-            for special cases.
+            to encourage the solver to build sparse covariance matrices. Higher
+            values of this parameter bias us toward inverse covariance matrices
+            with fewer non-zero entries.  This parameter is named lambda in the
+            TICC paper.  That's a reserved word in Python, hence the different
+            name.  Defaults to 0.11.  See above for special cases.
         label_switching_cost (float): Cost for switching labels
-            between one data point and the next.  Defaults to 400.  You may
-            also supply a NumPy array with as many entries as data points
-            in order to vary this from one point to the next.
+            between one data point and the next.  Defaults to 400.  You may also
+            supply a NumPy array with as many entries as data points in order to
+            vary this from one point to the next.
         iteration_limit (int): Maximum number of iterations before we
             give up and declare victory.  Defaults to 1000.
         min_meaningful_covariance (float): Any entries in the covariance
-            matrix that are smaller in magnitude than this value will be
-            zeroed out.  Defaults to 0 (no filtering).
+            matrix that are smaller in magnitude than this value will be zeroed
+            out.  Defaults to 0 (no filtering).
         num_processors (int): Number of processors to use in ADMM solver.
             Leave this at 1 unless you know for certain that your BLAS
             implementation doesn't do parallelism on its own.  See below.
@@ -159,34 +153,34 @@ def ticc_labels(data_series: np.ndarray,
             to reinitialize an empty cluster.  Defaults to 20.
         biased (bool): Whether to compute biased or unbiased covariance
             (i.e. divide by N or N-1).  Defaults to False (unbiased).
-        initial_model (list of NumPy arrays): Initial values for stacked 
+        initial_model (list of NumPy arrays): Initial values for stacked
             covariance matrices.  Get this from the 'covariance_matrices'
-            member of the result of a previous TICC run.  Defaults to 
+            member of the result of a previous TICC run.  Defaults to
             empty (initialize from data).  This is used when you want to
             label new data with an existing model.  If you supply
             an initial model, num_clusters is ignored.
         allow_model_updates (bool): If False, the model will be considered
             frozen and the algorithm will exit after one pass of labeling
-            the input data.  This is what you should choose if you are 
-            labeling new data with an existing model.  Defaults to True 
+            the input data.  This is what you should choose if you are
+            labeling new data with an existing model.  Defaults to True
             (perform full optimization as normal).
-            
+
     Returns:
         TICC results, including labels, Markov random fields, and information
-        about the optimizer results.  See
-        fast_ticc.containers.Result for details.
+        about the optimizer results.  See fast_ticc.containers.Result for
+        details.
 
     About num_processors:
 
     Most of our parallel execution happens automatically.  Modern BLAS
-    implementations do their linear algebra work in parallel.  We also
-    use Numba to parallelize our log likelihood computation.  You
-    do not need to intervene in either of these cases.  In fact, setting
-    num_processors > 1 here will likely cause TICC to run more slowly
-    because of cache and register contention.
+    implementations do their linear algebra work in parallel.  We also use Numba
+    to parallelize our log likelihood computation.  You do not need to intervene
+    in either of these cases.  In fact, setting num_processors > 1 here will
+    likely cause TICC to run more slowly because of cache and register
+    contention.
 
-    If you are certain that your BLAS implementation is single-threaded,
-    you may be able to get faster execution by setting num_processors > 1.
+    If you are certain that your BLAS implementation is single-threaded, you may
+    be able to get faster execution by setting num_processors > 1.
     """
 
     if initial_model and len(initial_model) != num_clusters:
@@ -219,7 +213,7 @@ def ticc_labels(data_series: np.ndarray,
     if initial_model:
         _verify_data_compatible_with_model(stacked_data, initial_model)
 
-    ticc_result = main_loop.fit_stacked_data(params, stacked_data, 
+    ticc_result = main_loop.fit_stacked_data(params, stacked_data,
                                              initial_model=initial_model,
                                              allow_model_updates=allow_model_updates)
     ticc_result.point_labels = data_preparation.pad_missing_labels(ticc_result.point_labels,
@@ -236,10 +230,8 @@ def ticc_joint_labels(data_series: Sequence[np.ndarray],
                       min_meaningful_covariance: float = 0,
                       num_processors: int = 1,
                       min_cluster_size: int = 20,
-                      biased_covariance: bool = False,
-                      initial_model: Optional[list[np.ndarray]]=None,
-                      allow_model_updates: bool=True
-                ) -> results.MultipleDataSeriesResult:
+                      biased_covariance: bool = False
+                      ) -> results.MultipleDataSeriesResult:
     """Compute TICC labels over several data series at once.
 
     This function is almost exactly like regular TICC, but instead of
@@ -334,16 +326,16 @@ def ticc_joint_labels(data_series: Sequence[np.ndarray],
             to reinitialize an empty cluster.  Defaults to 20.
         biased (bool): Whether to compute biased or unbiased covariance
             (i.e. divide by N or N-1).  Defaults to False (unbiased).
-        initial_model (list of NumPy arrays): Initial values for stacked 
+        initial_model (list of NumPy arrays): Initial values for stacked
             covariance matrices.  Get this from the 'covariance_matrices'
-            member of the result of a previous TICC run.  Defaults to 
+            member of the result of a previous TICC run.  Defaults to
             empty (initialize from data).  This is used when you want to
             label new data with an existing model.  If you supply
             an initial model, num_clusters is ignored.
         allow_model_updates (bool): If False, the model will be considered
             frozen and the algorithm will exit after one pass of labeling
-            the input data.  This is what you should choose if you are 
-            labeling new data with an existing model.  Defaults to True 
+            the input data.  This is what you should choose if you are
+            labeling new data with an existing model.  Defaults to True
             (perform full optimization as normal).
 
     Returns:
@@ -362,7 +354,7 @@ def ticc_joint_labels(data_series: Sequence[np.ndarray],
 
     if (not initial_model) and (not allow_model_updates):
         raise ValueError("Empty initial model requires allow_model_updates=True.")
-    
+
     try:
         combined_data_series = data_preparation.stack_training_data_multiple_series(
             data_series, window_size
@@ -401,10 +393,10 @@ def ticc_joint_labels(data_series: Sequence[np.ndarray],
         "of inputted data series."
 
     # Here we go!  This will take a while.
-    master_result = main_loop.fit_stacked_data(args, combined_data_series, 
+    master_result = main_loop.fit_stacked_data(args, combined_data_series,
                                                initial_model=initial_model,
                                                allow_model_updates=allow_model_updates)
-    
+
     ticc_multi_result = _split_combined_result(master_result, stacked_data_sizes,
                                                data_series)
     return ticc_multi_result
@@ -461,6 +453,7 @@ def _split_combined_result(master_result: results.SingleDataSeriesResult,
         overall_log_likelihood_median=master_result.overall_log_likelihood_median,
         cluster_log_likelihood_mean=master_result.cluster_log_likelihood_mean,
         cluster_log_likelihood_median=master_result.cluster_log_likelihood_median,
+        trained_model=master_result.trained_model
     )
 
     return ticc_multi_result

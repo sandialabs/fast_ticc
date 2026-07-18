@@ -1,4 +1,4 @@
-### Copyright 2023 National Technology & Engineering Solutions of Sandia,
+### Copyright 2023-2026 National Technology & Engineering Solutions of Sandia,
 ### LLC (NTESS). Under the terms of Contract DE-NA0003525 with NTESS, the
 ### U.S. Government retains certain rights in this software.
 ###
@@ -36,6 +36,33 @@
 import dataclasses
 from typing import List
 import numpy as np
+
+
+@dataclasses.dataclass(frozen=True)
+class TiccModel:
+    """Essential components of the trained model from TICC
+    
+    This contains the per-cluster inverse covariance matrices, 
+    data means, and parameters such as window size.  This is 
+    everything you need to pass back in to label new data with
+    an existing model.
+
+    Properties:
+        window_size (int): Window size for computing covariance
+        inverse_covariance (list of 2D np.ndarray): Per-cluster inverse 
+            covariance matrices
+        per_cluster_mean (list of 1D np.ndarray): Per-cluster mean
+            (center of each cluster in the original data)
+        num_clusters (int): Number of clusters in the data
+    """
+
+    window_size: int
+    inverse_covariance: list[np.ndarray]
+    per_cluster_mean: list[np.ndarray]
+
+    @property
+    def num_clusters(self) -> int:
+        return len(self.inverse_covariance)        
 
 
 @dataclasses.dataclass
@@ -91,6 +118,8 @@ class SingleDataSeriesResult:
             This happens with the last ``window_size - 1`` points.
         window_size (int): Length of each subsequence (measured in
             time steps) used in training.
+        trained_model (TiccModel): Data necessary to run the model on new
+            time series.
     """
 
     bayesian_information_criterion: float
@@ -100,12 +129,13 @@ class SingleDataSeriesResult:
     overall_log_likelihood: float
     overall_log_likelihood_mean: float
     overall_log_likelihood_median: float
-    cluster_log_likelihood_mean: List[float]
-    cluster_log_likelihood_median: List[float]
+    cluster_log_likelihood_mean: np.ndarray
+    cluster_log_likelihood_median: np.ndarray
     markov_random_fields: List[np.ndarray]
     num_clusters: int
     point_labels: List[int]
     window_size: int
+    trained_model: TiccModel
 
 
 @dataclasses.dataclass
@@ -170,6 +200,8 @@ class MultipleDataSeriesResult:
             ``num_clusters - 1`` are valid IDs.  Label -1 indicates that a
             point from the input was not labeled by TICC. This happens with
             the last ``window_size - 1`` points in each data series.
+        trained_model (TiccModel): Data necessary to run the model on new
+            time series.
         window_size (int): Length of each subsequence (measured in
             time steps) used in training.
     """
@@ -183,11 +215,11 @@ class MultipleDataSeriesResult:
     all_log_likelihood: List[float]
     overall_log_likelihood_mean: float
     overall_log_likelihood_median: float
-    cluster_log_likelihood_mean: List[float]
-    cluster_log_likelihood_median: List[float]
+    cluster_log_likelihood_mean: np.ndarray
+    cluster_log_likelihood_median: np.ndarray
     num_clusters: int
     window_size: int
-
+    trained_model: TiccModel
 
 
 @dataclasses.dataclass

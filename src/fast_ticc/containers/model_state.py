@@ -1,4 +1,4 @@
-### Copyright 2023 National Technology & Engineering Solutions of Sandia,
+### Copyright 2023-2026 National Technology & Engineering Solutions of Sandia,
 ### LLC (NTESS). Under the terms of Contract DE-NA0003525 with NTESS, the
 ### U.S. Government retains certain rights in this software.
 ###
@@ -45,6 +45,11 @@ import numpy as np
 
 from fast_ticc.containers import arguments as arg_containers
 
+__all__ = [
+    "ClusterParameters",
+    "ModelState",
+]
+
 class ClusterParameters:
     """Container for TICC parameters for a single cluster
 
@@ -69,14 +74,15 @@ class ClusterParameters:
         """
 
     def __init__(self,
-                 computed_covariance: Optional[np.ndarray] = None,
-                 empirical_covariance: Optional[np.ndarray] = None,
-                 graphical_lasso_cost: Optional[float] = None,
-                 inverse_covariance: Optional[np.ndarray] = None,
-                 log_determinant: Optional[np.ndarray] = None,
-                 member_points: Optional[List[int]] = None,
-                 stacked_data_mean: Optional[np.ndarray] = None,
-                 train_inverse: Optional[np.ndarray] = None,
+                 *, # All of these should be supplied by keyword
+                 computed_covariance: np.ndarray,
+                 empirical_covariance: np.ndarray,
+                 graphical_lasso_cost: float,
+                 inverse_covariance: np.ndarray,
+                 log_determinant: float,
+                 member_points: list[int],
+                 stacked_data_mean: np.ndarray,
+                 train_inverse: np.ndarray,
                  ):
 
         self.computed_covariance = computed_covariance
@@ -135,59 +141,14 @@ class ClusterParameters:
 
         return ClusterParameters(
             member_points=[],
-            computed_covariance=None,
-            stacked_data_mean=None,
-            empirical_covariance=None,
-            train_inverse=None,
-            inverse_covariance=None,
-            log_determinant=None
+            computed_covariance=np.array([]),
+            stacked_data_mean=np.array([]),
+            empirical_covariance=np.array([]),
+            train_inverse=np.array([]),
+            inverse_covariance=np.array([]),
+            log_determinant=0,
+            graphical_lasso_cost=0,
         )
-
-    def shallow_copy(self) -> "ClusterParameters":
-        """Shallow copy of cluster parameters
-
-        As a shallow copy, the non-atomic data items in the result
-        (the member point lists and forward/inverse covariance
-        matrices) are just pointers to the originals.  If you modify
-        them, you will also modify the originals.
-
-        Returns:
-            Shallow copy of cluster parameters
-        """
-
-        return ClusterParameters(
-            computed_covariance=self.computed_covariance,
-            empirical_covariance=self.empirical_covariance,
-            graphical_lasso_cost=self.graphical_lasso_cost,
-            inverse_covariance=self.inverse_covariance,
-            log_determinant=self.log_determinant,
-            member_points=self.member_points,
-            stacked_data_mean=self.stacked_data_mean,
-            train_inverse=self.train_inverse
-        )
-
-    def deep_copy(self) -> "ClusterParameters":
-        """Deep copy of cluster parameters
-
-        As a deep copy, the return value from this function can be
-        modified without affecting the original.
-
-        No arguments.
-
-        Returns:
-            New copy of cluster parameters
-        """
-        return ClusterParameters(
-            computed_covariance=np.copy(self.computed_covariance),
-            empirical_covariance=np.copy(self.empirical_covariance),
-            graphical_lasso_cost=self.graphical_lasso_cost,
-            inverse_covariance=np.copy(self.inverse_covariance),
-            log_determinant=self.log_determinant,
-            member_points=list(self.member_points),
-            stacked_data_mean=np.copy(self.stacked_data_mean),
-            train_inverse=np.copy(self.train_inverse)
-        )
-
 
 class ModelState:
     """All state information for a TICC model in progress.
@@ -218,12 +179,13 @@ class ModelState:
         """
 
     def __init__(self,
-                 arguments: Optional[arg_containers.UserArguments] = None,
-                 clusters: Optional[List[ClusterParameters]] = None,
-                 label_assignment_cost: Optional[float] = None,
-                 point_labels: Optional[List[int]] = None,
-                 point_log_likelihood: Optional[np.ndarray] = None,
-                 stacked_training_data: Optional[np.ndarray] = None):
+                 *, # all arguments are keyword-only
+                 arguments: arg_containers.UserArguments,
+                 clusters: list[ClusterParameters],
+                 label_assignment_cost: float,
+                 point_labels: list[int],
+                 point_log_likelihood: np.ndarray,
+                 stacked_training_data: np.ndarray):
 
         self.arguments = arguments
         self.clusters = clusters
@@ -255,12 +217,17 @@ class ModelState:
             ClusterParameters.empty_cluster()
             for i in range(user_args.num_clusters)
             ]
+        empty_point_labels = list()
         return ModelState(arguments=user_args,
                           clusters=empty_cluster_info,
+                          label_assignment_cost=-1,
+                          point_labels=empty_point_labels,
+                          point_log_likelihood=np.array([]),
                           stacked_training_data=stacked_training_data)
 
 
     def _update_cluster_membership(self):
+        assert self.clusters is not None
         if (self._point_labels is None or len(self._point_labels) == 0):
             for cluster in self.clusters:
                 cluster.member_points = []
@@ -270,6 +237,7 @@ class ModelState:
                 members[cluster_id].append(point_id)
             # We have to use range(num_clusters) here in order to pick up
             # clusters with no points in them.
+            assert self.arguments is not None
             for cluster_id in range(self.arguments.num_clusters):
                 this_cluster_members = members[cluster_id]
                 self.clusters[cluster_id].member_points = this_cluster_members
@@ -289,48 +257,3 @@ class ModelState:
         if new_labels != self._point_labels:
             self._point_labels = new_labels
             self._update_cluster_membership()
-
-    def shallow_copy(self) -> "ModelState":
-        """Create a shallow copy of this model's state.
-
-        Since this is a shallow copy, the arguments, cluster parameters,
-        log likelihood data, and training data are just pointers to the
-        originals.  Modifying them will modify the original as well.
-
-        No arguments.
-
-        Returns:
-            Shallow copy of model state.
-        """
-
-        return ModelState(
-            arguments=self.arguments,
-            clusters=list(self.clusters),
-            label_assignment_cost=self.label_assignment_cost,
-            point_labels=self._point_labels,
-            point_log_likelihood=self.point_log_likelihood,
-            stacked_training_data=self.stacked_training_data
-        )
-
-    def deep_copy(self) -> "ModelState":
-        """Create a deep copy of this model's state.
-
-        Since this is a deep copy, all data will be copied and none will be
-        shared with the original.  You can modify the return value without
-        affecting the model that you copied.
-
-        No arguments.
-
-        Returns:
-            New copy of model state.
-        """
-
-        new_clusters = [cluster.deep_copy() for cluster in self.clusters]
-        return ModelState(
-            arguments=self.arguments.deep_copy(),
-            clusters=new_clusters,
-            label_assignment_cost=self.label_assignment_cost,
-            point_labels=list(self._point_labels),
-            point_log_likelihood=np.copy(self.point_log_likelihood),
-            stacked_training_data=np.copy(self.stacked_training_data)
-        )

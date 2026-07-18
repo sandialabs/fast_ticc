@@ -1,4 +1,4 @@
-### Copyright 2023 National Technology & Engineering Solutions of Sandia,
+### Copyright 2023-2026 National Technology & Engineering Solutions of Sandia,
 ### LLC (NTESS). Under the terms of Contract DE-NA0003525 with NTESS, the
 ### U.S. Government retains certain rights in this software.
 ###
@@ -43,7 +43,7 @@ import logging
 import multiprocessing
 import os
 
-from typing import List
+from typing import List, Optional
 
 import numpy as np
 
@@ -57,12 +57,15 @@ from fast_ticc.containers import arguments
 from fast_ticc.containers import model_state
 from fast_ticc.containers import results
 
+# We need this to correctly type hint multiprocessing.Pool
+from multiprocessing.pool import Pool as mp_Pool
 
 LOGGER = logging.getLogger(__name__)
 
 
 def fit_stacked_data(user_args: arguments.UserArguments,
-                     stacked_training_data: np.ndarray) -> results.SingleDataSeriesResult:
+                     stacked_training_data: np.ndarray
+                     ) -> results.SingleDataSeriesResult:
     """Fit cluster labels to already-stacked data series.
 
     This is the TICC main loop.
@@ -84,17 +87,25 @@ def fit_stacked_data(user_args: arguments.UserArguments,
         labels and Markov random fields
     """
 
-    assert user_args.iteration_limit > 0  # must have at least one iteration
-
-    num_data_points = stacked_training_data.shape[0]
-
-    current_model_state = model_state.ModelState.empty_model(
+    model = model_state.ModelState.empty_model(
         user_args, stacked_training_data)
-    current_model_state.point_labels = cluster_label_assignment.build_initial_clusters(
+
+
+    model.point_labels = cluster_label_assignment.build_initial_clusters(
         user_args.num_clusters, stacked_training_data
     )
+    model = _optimize_model(model, stacked_training_data)
 
-    current_model_state.arguments.print()
+    # Extract all the model statistics and build the derived results
+    return _package_results(model, user_args, stacked_training_data)
+
+
+def _optimize_model(model: model_state.ModelState,
+                    stacked_training_data: np.ndarray) -> model_state.ModelState:
+
+
+    assert model.arguments.iteration_limit > 0  # must have at least one iteration
+    model.arguments.print()
 
     # We will use this to detect convergence
     previous_iteration_point_labels = None
@@ -102,99 +113,45 @@ def fit_stacked_data(user_args: arguments.UserArguments,
     # The context manager syntax for multiprocessing pools is convenient
     # but causes problems with computing test coverage.  We initialize
     # and close it manually to let pycov/coverage do their thing.
-    task_pool = _init_task_pool(current_model_state.arguments.num_processors)
+    task_pool = _init_task_pool(model.arguments.num_processors)
 
-    for current_iteration in range(current_model_state.arguments.iteration_limit):
+    for current_iteration in range(model.arguments.iteration_limit):
         LOGGER.info("TICC: Beginning iteration %d", current_iteration)
 
         if current_iteration > 0:
-            current_model_state = cluster_maintenance.repopulate_empty_clusters(
-                current_model_state)
+            model = cluster_maintenance.repopulate_empty_clusters(
+                model)
 
-        current_model_state = cluster_maintenance.update_all_cluster_statistics(
-            current_model_state, stacked_training_data
+        model = cluster_maintenance.update_all_cluster_statistics(
+            model, stacked_training_data
         )
 
-        current_model_state = graphical_lasso.optimize_markov_random_fields(
-            current_model_state, stacked_training_data, task_pool
+        model = graphical_lasso.optimize_markov_random_fields(
+            model, stacked_training_data, task_pool
         )
 
-        current_model_state = cluster_label_assignment.predict_cluster_labels(
-            current_model_state, stacked_training_data
+        model = cluster_label_assignment.predict_cluster_labels(
+            model, stacked_training_data
         )
 
         if (previous_iteration_point_labels ==
-                current_model_state.point_labels):
+                model.point_labels):
             LOGGER.info((
                 "Cluster assignments have converged. Optimization "
                 "complete."))
             break
         previous_iteration_point_labels = copy.copy(
-            current_model_state.point_labels)
+            model.point_labels)
         # end of main loop
 
     # This will trigger pycov/coverage's handlers to record test coverage
     task_pool.close()
     task_pool.join()
 
-    # Extract all the model statistics and build the derived results
-
-    bayesian_ic = cluster_metrics.bayesian_information_criterion(current_model_state)
-    calinski_harabasz = cluster_metrics.calinski_harabasz_index(stacked_training_data,
-                                                                current_model_state)
-
-    labels = [-1] * num_data_points
-    for i in range(stacked_training_data.shape[0]):
-        labels[i] = current_model_state.point_labels[i]
+    return model
 
 
-    markov_random_fields = [
-        current_model_state.clusters[cluster_id].train_inverse
-        for cluster_id in range(current_model_state.arguments.num_clusters)
-    ]
-
-    cluster_log_likelihood = _compute_log_likelihood_by_cluster(
-        stacked_training_data, current_model_state
-    )
-
-    # make this forward-facing
-    all_log_likelihood = list(itertools.chain(*cluster_log_likelihood))
-
-    overall_log_likelihood = np.sum(all_log_likelihood)
-    overall_log_likelihood_mean = np.mean(all_log_likelihood)
-    overall_log_likelihood_median = np.median(all_log_likelihood)
-    cluster_log_likelihood_mean = np.array([
-        np.mean(single_cluster_log_likelihood)
-        for single_cluster_log_likelihood in cluster_log_likelihood
-    ])
-    cluster_log_likelihood_median = np.array([
-        np.median(single_cluster_log_likelihood)
-        for single_cluster_log_likelihood in cluster_log_likelihood
-    ])
-
-
-    # At this point in the algorithm we neither know nor care how many
-    # data series came in for processing.  If it's more than one, the
-    # front end will take care of splitting this result into components
-    # that correspond to the individual input series.
-
-    return results.SingleDataSeriesResult(
-        bayesian_information_criterion=bayesian_ic,
-        calinski_harabasz_index=calinski_harabasz,
-        label_assignment_cost=current_model_state.label_assignment_cost,
-        overall_log_likelihood=overall_log_likelihood,
-        overall_log_likelihood_mean=overall_log_likelihood_mean,
-        overall_log_likelihood_median=overall_log_likelihood_median,
-        cluster_log_likelihood_mean=cluster_log_likelihood_mean,
-        cluster_log_likelihood_median=cluster_log_likelihood_median,
-        all_log_likelihood=all_log_likelihood,
-        markov_random_fields=markov_random_fields,
-        num_clusters=current_model_state.arguments.num_clusters,
-        point_labels=labels,
-        window_size=current_model_state.arguments.window_size)
-
-
-def _init_task_pool(num_processes: int) -> multiprocessing.Pool:
+def _init_task_pool(num_processes: int) -> mp_Pool:
     """Instantiate a task pool for multiprocessing
 
     When benchmarking or debugging, we might want to force the
@@ -241,18 +198,22 @@ def _init_task_pool(num_processes: int) -> multiprocessing.Pool:
 
 
 def _compute_log_likelihood_by_cluster(stacked_training_data: np.ndarray,
-                                       model: model_state.ModelState) -> List[np.ndarray]:
+                                       model: model_state.ModelState) -> list[list[float]]:
     """Compute final log likelihood values for each cluster's data
 
     For each cluster, build a list containing the log likelihood values for
     that cluster's constituent points.
+
+    This supports computing per-cluster statistics about log likelihood.  This
+    data structure is NOT intended as a user-facing index for log likelihood per
+    cluster.
 
     Arguments:
         stacked_training_data (NumPy array): Training data for TICC
         model (TICC model state): Final trained model
 
     Returns:
-        List of NumPy arrays, one per cluster.  Each NumPy array contains
+        List of list of floats, one per cluster.  Each list contains
         the log likelihood values for its corresponding cluster's points.
     """
 
@@ -277,3 +238,84 @@ def _compute_log_likelihood_by_cluster(stacked_training_data: np.ndarray,
             next_cluster_array.append(0)
 
     return cluster_log_likelihood
+
+def _package_results(model: model_state.ModelState,
+                     user_args: arguments.UserArguments,
+                     stacked_training_data: np.ndarray
+                     ) -> results.SingleDataSeriesResult:
+    """Bundle up trained model and statistics for return to the user
+
+    This is an internal function not meant to be called from outside the
+    library.
+
+    Here we pull out all of the model components that we'll need to initialize a
+    new model later on.  We also compute and package diagnostic information
+    about the clusters so that the user can analyze goodness of fit.  See
+    results.SingleDataSeriesResult for details of what's included.
+
+    Arguments:
+        model (model_state.ModelState): Trained model from TICC main loop
+        user_args (arguments.UserArguments): Initial arguments to TICC
+        stacked_training_data (numpy.ndarray): Main data array for training
+
+    Returns:
+        results.SingleDataSeriesResult: Container for trained model and
+        info statistics
+    """
+
+
+    bayesian_ic = cluster_metrics.bayesian_information_criterion(model)
+    calinski_harabasz = cluster_metrics.calinski_harabasz_index(stacked_training_data,
+                                                                model)
+
+    num_data_points = stacked_training_data.shape[0]
+    labels = [-1] * num_data_points
+    for i in range(stacked_training_data.shape[0]):
+        labels[i] = model.point_labels[i]
+
+
+    markov_random_fields = [
+        model.clusters[cluster_id].train_inverse
+        for cluster_id in range(model.arguments.num_clusters)
+    ]
+
+    cluster_log_likelihood = _compute_log_likelihood_by_cluster(
+        stacked_training_data, model
+    )
+
+    # make this forward-facing
+    all_log_likelihood = list(itertools.chain(*cluster_log_likelihood))
+
+    overall_log_likelihood = np.sum(all_log_likelihood)
+    overall_log_likelihood_mean = float(np.mean(all_log_likelihood))
+    overall_log_likelihood_median = np.median(all_log_likelihood)
+    cluster_log_likelihood_mean = np.array([
+        np.mean(single_cluster_log_likelihood)
+        for single_cluster_log_likelihood in cluster_log_likelihood
+    ])
+    cluster_log_likelihood_median = np.array([
+        np.median(single_cluster_log_likelihood)
+        for single_cluster_log_likelihood in cluster_log_likelihood
+    ])
+
+    final_model = results.TiccModel(
+        window_size=model.arguments.window_size,
+        inverse_covariance=markov_random_fields,
+        per_cluster_mean=[cluster.stacked_data_mean for cluster in model.clusters]
+    )
+
+    return results.SingleDataSeriesResult(
+        bayesian_information_criterion=bayesian_ic,
+        calinski_harabasz_index=calinski_harabasz,
+        label_assignment_cost=model.label_assignment_cost,
+        overall_log_likelihood=overall_log_likelihood,
+        overall_log_likelihood_mean=overall_log_likelihood_mean,
+        overall_log_likelihood_median=overall_log_likelihood_median,
+        cluster_log_likelihood_mean=cluster_log_likelihood_mean,
+        cluster_log_likelihood_median=cluster_log_likelihood_median,
+        all_log_likelihood=all_log_likelihood,
+        markov_random_fields=markov_random_fields,
+        num_clusters=model.arguments.num_clusters,
+        point_labels=labels,
+        window_size=model.arguments.window_size,
+        trained_model=final_model)
