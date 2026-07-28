@@ -496,7 +496,7 @@ def _verify_data_compatible_with_model(stacked_data: np.ndarray,
     if len(initial_model.per_cluster_mean) == 0:
         raise RuntimeError("Initial model contains no cluster means.  This shouldn't happen.")
 
-    expected_num_columns = len(initial_model.per_cluster_mean[0].shape[0])
+    expected_num_columns = initial_model.per_cluster_mean[0].shape[0]
     actual_num_columns = stacked_data.shape[1]
 
     if expected_num_columns != actual_num_columns:
