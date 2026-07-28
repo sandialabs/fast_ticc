@@ -67,7 +67,7 @@ def ticc_labels(data_series: np.ndarray,
                 min_cluster_size: int = 20,
                 biased_covariance: bool = False,
                 initial_model: Optional[results.TiccModel] = None,
-                allow_model_updates: bool = False
+                allow_model_updates: bool = True
                 ) -> results.SingleDataSeriesResult:
     """Compute TICC labels for a data series.
 
@@ -240,7 +240,7 @@ def ticc_joint_labels(data_series: Sequence[np.ndarray],
                       min_cluster_size: int = 20,
                       biased_covariance: bool = False,
                       initial_model: Optional[results.TiccModel] = None,
-                      allow_model_updates: bool = False
+                      allow_model_updates: bool = True
                       ) -> results.MultipleDataSeriesResult:
     """Compute TICC labels over several data series at once.
 
