@@ -35,6 +35,7 @@
 #
 
 from fast_ticc import front_end as ticc_front_end
+from fast_ticc.containers import results as ft_results
 import fast_ticc
 import numpy as np
 import pytest
@@ -49,7 +50,7 @@ def single_trajectory_features(load_test_data):
 
 
 @pytest.fixture(scope="module")
-def computed_ticc_result(single_trajectory_features,
+def initial_ticc_result(single_trajectory_features,
                          min_meaningful_covariance,
                          random_seed,
                          label_switching_cost,
@@ -69,12 +70,13 @@ def computed_ticc_result(single_trajectory_features,
     return ticc_result
 
 
-def test_ticc_label_new_data(single_trajectory_features,
-                             min_meaningful_covariance,
-                             random_seed,
-                             label_switching_cost,
-                             num_clusters,
-                             window_size):
+@pytest.fixture
+def new_labels_from_old_model(single_trajectory_features,
+                              min_meaningful_covariance,
+                              random_seed,
+                              label_switching_cost,
+                              num_clusters,
+                              window_size) -> fast_ticc.SingleDataSeriesResult:
 
     np.random.seed(random_seed)
     first_ticc_result = ticc_front_end.ticc_labels(
@@ -99,11 +101,80 @@ def test_ticc_label_new_data(single_trajectory_features,
             allow_model_updates=False
     )
 
-    assert len(first_ticc_result.point_labels) == len(relabel_result.point_labels)
-    all_equal = True
-    for (i, (old_label, new_label)) in enumerate(zip(first_ticc_result.point_labels,
-                                                     relabel_result.point_labels)):
-        if old_label != new_label:
-            print(f"ERROR: point {i}: initial model label {old_label}, new model label {new_label}")
-            all_equal = False
-    assert all_equal
+    return relabel_result
+
+
+def test_ticc_relabel_single_trajectory_labels(new_labels_from_old_model, num_regression):
+    result_dict = {
+        "point_labels": new_labels_from_old_model.point_labels
+    }
+    num_regression.check(result_dict)
+
+
+def test_ticc_relabel_single_trajectory_mrf(new_labels_from_old_model, ndarrays_regression):
+    result_dict = {}
+    for i in range(new_labels_from_old_model.num_clusters):
+        result_dict[f"cluster_{i}_mrf"] = new_labels_from_old_model.markov_random_fields[i]
+    ndarrays_regression.check(result_dict)
+
+
+def test_ticc_relabel_single_trajectory_label_cost(new_labels_from_old_model, num_regression):
+    result_dict = {
+        "label_cost": new_labels_from_old_model.label_assignment_cost
+    }
+    num_regression.check(result_dict)
+
+
+def test_ticc_relabel_single_trajectory_bayesian_information_criterion(new_labels_from_old_model, num_regression):
+    result_dict = {
+        "BIC": new_labels_from_old_model.bayesian_information_criterion
+    }
+    num_regression.check(result_dict)
+
+
+def test_ticc_relabel_single_trajectory_calinski_harabasz_index(new_labels_from_old_model, num_regression):
+    result_dict = {
+        "CHI": new_labels_from_old_model.calinski_harabasz_index}
+    num_regression.check(result_dict)
+
+
+def test_ticc_relabel_single_trajectory_overall_log_likelihood(new_labels_from_old_model, num_regression):
+    result_dict = {
+        "overall_log_likelihood": new_labels_from_old_model.overall_log_likelihood,
+        "overall_log_likelihood_mean": new_labels_from_old_model.overall_log_likelihood_mean,
+        "overall_log_likelihood_median": new_labels_from_old_model.overall_log_likelihood_median
+    }
+    num_regression.check(result_dict)
+
+
+def test_ticc_relabel_single_trajectory_cluster_log_likelihood(new_labels_from_old_model, num_regression):
+    result_dict = {
+        "cluster_log_likelihood_mean": new_labels_from_old_model.cluster_log_likelihood_mean,
+        "cluster_log_likelihood_median": new_labels_from_old_model.cluster_log_likelihood_median
+    }
+    num_regression.check(result_dict)
+
+
+def test_relabeled_ticc_model_fully_populated(
+        new_labels_from_old_model: fast_ticc.SingleDataSeriesResult,
+        window_size: int,
+        num_clusters: int,
+        single_trajectory_features: np.ndarray):
+    trained_model = new_labels_from_old_model.trained_model
+
+    num_points = single_trajectory_features.shape[0]
+    num_sensors = single_trajectory_features.shape[1]
+
+    nw = num_sensors * window_size
+
+    assert len(trained_model.per_cluster_mean) == num_clusters
+    assert len(trained_model.inverse_covariance) == num_clusters
+    assert trained_model.window_size == window_size
+    assert trained_model.num_clusters == num_clusters
+
+    for mean in trained_model.per_cluster_mean:
+        assert mean.shape == (nw,)
+
+    for inv_covariance in trained_model.inverse_covariance:
+        assert inv_covariance.shape == (nw, nw)
+
