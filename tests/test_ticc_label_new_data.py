@@ -71,12 +71,12 @@ def initial_ticc_result(single_trajectory_features,
 
 
 @pytest.fixture
-def new_labels_from_old_model(single_trajectory_features,
-                              min_meaningful_covariance,
-                              random_seed,
-                              label_switching_cost,
-                              num_clusters,
-                              window_size) -> fast_ticc.SingleDataSeriesResult:
+def new_labels_from_old_model_single(single_trajectory_features,
+                                     min_meaningful_covariance,
+                                     random_seed,
+                                     label_switching_cost,
+                                     num_clusters,
+                                     window_size) -> fast_ticc.SingleDataSeriesResult:
 
     np.random.seed(random_seed)
     first_ticc_result = ticc_front_end.ticc_labels(
@@ -104,63 +104,63 @@ def new_labels_from_old_model(single_trajectory_features,
     return relabel_result
 
 
-def test_ticc_relabel_single_trajectory_labels(new_labels_from_old_model, num_regression):
+def test_ticc_relabel_single_trajectory_labels(new_labels_from_old_model_single, num_regression):
     result_dict = {
-        "point_labels": new_labels_from_old_model.point_labels
+        "point_labels": new_labels_from_old_model_single.point_labels
     }
     num_regression.check(result_dict)
 
 
-def test_ticc_relabel_single_trajectory_mrf(new_labels_from_old_model, ndarrays_regression):
+def test_ticc_relabel_single_trajectory_mrf(new_labels_from_old_model_single, ndarrays_regression):
     result_dict = {}
-    for i in range(new_labels_from_old_model.num_clusters):
-        result_dict[f"cluster_{i}_mrf"] = new_labels_from_old_model.markov_random_fields[i]
+    for i in range(new_labels_from_old_model_single.num_clusters):
+        result_dict[f"cluster_{i}_mrf"] = new_labels_from_old_model_single.markov_random_fields[i]
     ndarrays_regression.check(result_dict)
 
 
-def test_ticc_relabel_single_trajectory_label_cost(new_labels_from_old_model, num_regression):
+def test_ticc_relabel_single_trajectory_label_cost(new_labels_from_old_model_single, num_regression):
     result_dict = {
-        "label_cost": new_labels_from_old_model.label_assignment_cost
+        "label_cost": new_labels_from_old_model_single.label_assignment_cost
     }
     num_regression.check(result_dict)
 
 
-def test_ticc_relabel_single_trajectory_bayesian_information_criterion(new_labels_from_old_model, num_regression):
+def test_ticc_relabel_single_trajectory_bayesian_information_criterion(new_labels_from_old_model_single, num_regression):
     result_dict = {
-        "BIC": new_labels_from_old_model.bayesian_information_criterion
+        "BIC": new_labels_from_old_model_single.bayesian_information_criterion
     }
     num_regression.check(result_dict)
 
 
-def test_ticc_relabel_single_trajectory_calinski_harabasz_index(new_labels_from_old_model, num_regression):
+def test_ticc_relabel_single_trajectory_calinski_harabasz_index(new_labels_from_old_model_single, num_regression):
     result_dict = {
-        "CHI": new_labels_from_old_model.calinski_harabasz_index}
+        "CHI": new_labels_from_old_model_single.calinski_harabasz_index}
     num_regression.check(result_dict)
 
 
-def test_ticc_relabel_single_trajectory_overall_log_likelihood(new_labels_from_old_model, num_regression):
+def test_ticc_relabel_single_trajectory_overall_log_likelihood(new_labels_from_old_model_single, num_regression):
     result_dict = {
-        "overall_log_likelihood": new_labels_from_old_model.overall_log_likelihood,
-        "overall_log_likelihood_mean": new_labels_from_old_model.overall_log_likelihood_mean,
-        "overall_log_likelihood_median": new_labels_from_old_model.overall_log_likelihood_median
+        "overall_log_likelihood": new_labels_from_old_model_single.overall_log_likelihood,
+        "overall_log_likelihood_mean": new_labels_from_old_model_single.overall_log_likelihood_mean,
+        "overall_log_likelihood_median": new_labels_from_old_model_single.overall_log_likelihood_median
     }
     num_regression.check(result_dict)
 
 
-def test_ticc_relabel_single_trajectory_cluster_log_likelihood(new_labels_from_old_model, num_regression):
+def test_ticc_relabel_single_trajectory_cluster_log_likelihood(new_labels_from_old_model_single, num_regression):
     result_dict = {
-        "cluster_log_likelihood_mean": new_labels_from_old_model.cluster_log_likelihood_mean,
-        "cluster_log_likelihood_median": new_labels_from_old_model.cluster_log_likelihood_median
+        "cluster_log_likelihood_mean": new_labels_from_old_model_single.cluster_log_likelihood_mean,
+        "cluster_log_likelihood_median": new_labels_from_old_model_single.cluster_log_likelihood_median
     }
     num_regression.check(result_dict)
 
 
 def test_relabeled_ticc_model_fully_populated(
-        new_labels_from_old_model: fast_ticc.SingleDataSeriesResult,
+        new_labels_from_old_model_single: fast_ticc.SingleDataSeriesResult,
         window_size: int,
         num_clusters: int,
         single_trajectory_features: np.ndarray):
-    trained_model = new_labels_from_old_model.trained_model
+    trained_model = new_labels_from_old_model_single.trained_model
 
     num_points = single_trajectory_features.shape[0]
     num_sensors = single_trajectory_features.shape[1]
@@ -177,4 +177,94 @@ def test_relabeled_ticc_model_fully_populated(
 
     for inv_covariance in trained_model.inverse_covariance:
         assert inv_covariance.shape == (nw, nw)
+
+
+# ----------------------------------------------------------
+# Below here are the tests for multiple trajectories at once
+# ----------------------------------------------------------
+
+@pytest.fixture(scope="module")
+def multiple_trajectory_features(load_test_data):
+    return load_test_data("multiple_trajectory_features")
+
+@pytest.fixture(scope="module")
+def new_labels_from_old_model_multiple(
+                         multiple_trajectory_features,
+                         num_clusters,
+                         window_size,
+                         label_switching_cost,
+                         random_seed):
+
+    np.random.seed(random_seed)
+    first_ticc_result = ticc_front_end.ticc_joint_labels(
+        multiple_trajectory_features,
+        window_size=window_size,
+        num_clusters=num_clusters,
+        num_processors=num_clusters,
+        label_switching_cost=label_switching_cost
+    )
+
+    trained_model = first_ticc_result.trained_model
+
+    relabel_result = ticc_front_end.ticc_joint_labels(
+            multiple_trajectory_features,
+            window_size=window_size,
+            num_clusters=num_clusters,
+            num_processors=num_clusters,
+            label_switching_cost=label_switching_cost,
+            initial_model=trained_model,
+            allow_model_updates=False
+    )
+
+    return relabel_result
+
+
+def test_ticc_multiple_trajectory_labels(new_labels_from_old_model_multiple, num_regression):
+    result_dict = {}
+    for cluster_id in range(new_labels_from_old_model_multiple.num_clusters):
+        # For some reason, pytest-regressions will only check multiple arrays with
+        # different shapes if they're floats.
+        # It's safe to convert these to floats because labels are always small enough
+        # to be represented exactly.
+        labels = new_labels_from_old_model_multiple.point_labels[cluster_id]
+        result_dict[f"cluster_{cluster_id}_labels"] = np.array(
+            labels).astype(np.float32)
+
+    num_regression.check(result_dict)
+
+
+def test_ticc_multiple_trajectory_mrf(new_labels_from_old_model_multiple, ndarrays_regression):
+    result_dict = {}
+    for cluster_id in range(new_labels_from_old_model_multiple.num_clusters):
+        result_dict[f"cluster_{cluster_id}_mrf"] = new_labels_from_old_model_multiple.markov_random_fields[cluster_id]
+    ndarrays_regression.check(result_dict)
+
+
+def test_ticc_multiple_trajectory_bayesian_information_criterion(new_labels_from_old_model_multiple, num_regression):
+    result_dict = {"BIC": new_labels_from_old_model_multiple.bayesian_information_criterion}
+    num_regression.check(result_dict)
+
+
+def test_ticc_multiple_trajectory_calinski_harabasz_index(new_labels_from_old_model_multiple, num_regression):
+    result_dict = {
+        "CHI": new_labels_from_old_model_multiple.calinski_harabasz_index}
+    num_regression.check(result_dict)
+
+
+def test_ticc_multiple_trajectory_overall_log_likelihood(new_labels_from_old_model_multiple, num_regression):
+    result_dict = {
+        "overall_log_likelihood": new_labels_from_old_model_multiple.overall_log_likelihood,
+        "overall_log_likelihood_mean": new_labels_from_old_model_multiple.overall_log_likelihood_mean,
+        "overall_log_likelihood_median": new_labels_from_old_model_multiple.overall_log_likelihood_median
+    }
+    num_regression.check(result_dict)
+
+
+def test_ticc_multiple_trajectory_cluster_log_likelihood(new_labels_from_old_model_multiple, num_regression):
+    result_dict = {
+        "per_cluster_log_likelihood_mean": new_labels_from_old_model_multiple.cluster_log_likelihood_mean,
+        "per_cluster_log_likelihood_median": new_labels_from_old_model_multiple.cluster_log_likelihood_median
+    }
+    num_regression.check(result_dict)
+
 
