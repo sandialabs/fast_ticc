@@ -15,3 +15,7 @@ Fixed two bugs:
 - #5: Numba was missing type information.  This was causing weird compile-like errors.
 - #6: Argument order was flipped between `num_clusters` and `window_size` in the user guide.
 
+## Release 1.1.0: August 6, 2026
+
+- #1, #3: Major new feature: label new data series with already-trained model.
+- #4: Cleanup: Remove copy methods for container classes.  Use Python's built-in `copy` module instead.
