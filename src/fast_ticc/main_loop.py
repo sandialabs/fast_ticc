@@ -64,7 +64,9 @@ LOGGER = logging.getLogger(__name__)
 
 
 def fit_stacked_data(user_args: arguments.UserArguments,
-                     stacked_training_data: np.ndarray
+                     stacked_training_data: np.ndarray,
+                     initial_model: Optional[results.TiccModel]=None,
+                     optimize_model: bool=True
                      ) -> results.SingleDataSeriesResult:
     """Fit cluster labels to already-stacked data series.
 
@@ -74,13 +76,24 @@ def fit_stacked_data(user_args: arguments.UserArguments,
     and result splitting.
 
     Arguments:
-        stacked_training_data (NumPy array): Data to fit.  Must have
+        stacked_training_data (numpy.ndarray): Data to fit.  Must have
             one row for each data point and T x W columns.  The
             first W columns at each time t are the original time series.
             Columns [W, 2*W) are the data values at time t+1.
             Columns [2*W, 3*W) are the data values at time t+2.
             Continue in this fashion all the way up to time
             t+(W-1).
+
+    Keyword Arguments:
+        initial_model (fast_ticc.containers.results.TiccModel): Pre-trained
+            model for initializing labels.  Use with 'optimize_model=False'
+            to label new data with a pre-trained model.  Defaults to None
+            (initialize new model).
+        optimize_model (bool): If True (the default), optimize (train) the
+            model until convergence.  If False, label the data points with
+            the model as-is and then exit.  Use False when you want to
+            label new data with an existing model without changing that
+            model.
 
     Returns:
         ticc.containers.results.SingleDataSeriesResult containing assigned
@@ -90,14 +103,62 @@ def fit_stacked_data(user_args: arguments.UserArguments,
     model = model_state.ModelState.empty_model(
         user_args, stacked_training_data)
 
+    if initial_model:
+        model = _populate_model(model, initial_model)
+        model = cluster_label_assignment.predict_cluster_labels(
+            model, stacked_training_data
+        )
+    else:
+        model.point_labels = cluster_label_assignment.build_initial_clusters(
+            user_args.num_clusters, stacked_training_data
+        )
 
-    model.point_labels = cluster_label_assignment.build_initial_clusters(
-        user_args.num_clusters, stacked_training_data
-    )
-    model = _optimize_model(model, stacked_training_data)
+    if optimize_model:
+        model = _optimize_model(model, stacked_training_data)
 
     # Extract all the model statistics and build the derived results
     return _package_results(model, user_args, stacked_training_data)
+
+
+def _populate_model(model_container: model_state.ModelState,
+                    initial_model: results.TiccModel) -> model_state.ModelState:
+    """Populate a model from a previous result
+
+    Copy the inverse covariance matrices and cluster centers into the
+    supplied model container.
+
+    Arguments:
+        model_container (fast_ticc.containers.model_state.ModelState):
+            Container for model to be used in this run
+        initial_model (fast_ticc.containers.results.TiccModel): Model
+            populated on previous run
+
+    Returns:
+        Copy of model_container with cluster parameters filled in
+    """
+
+    result = copy.copy(model_container)
+    new_clusters = []
+
+    for (inv_cov, mean) in zip(initial_model.inverse_covariance,
+                               initial_model.per_cluster_mean):
+        covariance = np.linalg.inv(inv_cov)
+        cluster = model_state.ClusterParameters(
+            computed_covariance=covariance,
+            empirical_covariance=covariance,
+            inverse_covariance=inv_cov,
+            train_inverse=inv_cov,
+            log_determinant=np.log(np.linalg.det(inv_cov)),
+            stacked_data_mean=mean,
+            # fake, will be replaced during optimization
+            graphical_lasso_cost=0,
+            member_points=list()
+            )
+        new_clusters.append(cluster)
+    result.clusters = new_clusters
+
+    return result
+
 
 
 def _optimize_model(model: model_state.ModelState,

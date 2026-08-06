@@ -13,3 +13,10 @@ Release 1.0.1, 26 March 2024
 Fixed a bug where Numba wasn't able to get the type information it
 needed.  Also fixed two transposed arguments in the documentation.
 
+Release 1.1.0, 6 Aug 2026
+-------------------------
+
+New capability: Label new data series with previously trained model.
+
+Temporarily disabled predictor for number of clusters due to
+dependency issues with Numba and SciPy.

@@ -45,6 +45,7 @@ ways to fix that.
 """
 
 from typing import List, Optional, Sequence, Union
+import logging
 
 import numpy as np
 
@@ -53,6 +54,7 @@ from fast_ticc.containers import results
 from fast_ticc import data_preparation
 from fast_ticc import main_loop
 
+LOG = logging.getLogger(__name__)
 
 def ticc_labels(data_series: np.ndarray,
                 window_size: int = 10,
@@ -63,7 +65,9 @@ def ticc_labels(data_series: np.ndarray,
                 min_meaningful_covariance: float = 0,
                 num_processors: int = 1,
                 min_cluster_size: int = 20,
-                biased_covariance: bool = False
+                biased_covariance: bool = False,
+                initial_model: Optional[results.TiccModel] = None,
+                allow_model_updates: bool = True
                 ) -> results.SingleDataSeriesResult:
     """Compute TICC labels for a data series.
 
@@ -88,12 +92,12 @@ def ticc_labels(data_series: np.ndarray,
         expensive it is to change labels.
 
         By default, we assume that this parameter (known as beta or "label
-        switching cost/penalty") is constant throughout the input data.
-        However, if you are clustering multiple data series at once, you might
-        want to supply an array instead.  If the data series are independent,
-        there's no reason to expect that the label at the end of data series D
-        would be the same as the label at the beginning of data series D+1.  At
-        that specific point, beta should be zero.
+        switching cost/penalty") is constant throughout the input data. However,
+        if you are clustering multiple data series at once, you might want to
+        supply an array instead.  If the data series are independent, there's no
+        reason to expect that the label at the end of data series D would be the
+        same as the label at the beginning of data series D+1.  At that specific
+        point, beta should be zero.
 
         Here's how you do that.  Let's suppose that all of your already-stacked
         data series are in the list `data_series`.  Each data series is a NumPy
@@ -127,7 +131,8 @@ def ticc_labels(data_series: np.ndarray,
         window_size (int): Number of data points to stack together
             for window.  Defaults to 10.
         num_clusters (int): How many different labels to construct.
-            Defaults to 5.
+            Defaults to 5.  If you supply an initial model, this value is
+            ignored.
         sparsity_weight (float or NumPy array): Regularization term
             to encourage the solver to build sparse covariance matrices. Higher
             values of this parameter bias us toward inverse covariance matrices
@@ -150,6 +155,17 @@ def ticc_labels(data_series: np.ndarray,
             to reinitialize an empty cluster.  Defaults to 20.
         biased (bool): Whether to compute biased or unbiased covariance
             (i.e. divide by N or N-1).  Defaults to False (unbiased).
+        initial_model (results.TiccModel): Initial values for stacked
+            covariance matrices and cluster means.  Get this from the
+            ``trained_model`` field of the results from a previous run. Defaults
+            to empty, in which case the model is initialized from the data. If
+            you supply an initial model, num_clusters is set from the trained
+            model instead of the value supplied for ``num_clusters``.
+        allow_model_updates (bool): If False, the model will be considered
+            frozen and the algorithm will exit after one pass of labeling the
+            input data.  This is what you should choose if you are labeling new
+            data with an existing model.  Defaults to True (perform full
+            optimization as normal).
 
     Returns:
         TICC results, including labels, Markov random fields, and information
@@ -168,6 +184,19 @@ def ticc_labels(data_series: np.ndarray,
     If you are certain that your BLAS implementation is single-threaded, you may
     be able to get faster execution by setting num_processors > 1.
     """
+
+    if initial_model:
+        if initial_model.num_clusters != num_clusters:
+            LOG.info("Overriding num_clusters with value (%s) from pre-trained model.",
+                     initial_model.num_clusters)
+            num_clusters = initial_model.num_clusters
+        if initial_model.window_size != window_size:
+            LOG.info("Overriding window_size with value (%s) from pre-trained model.",
+                     initial_model.window_size)
+            window_size = initial_model.window_size
+
+    if (not initial_model) and (not allow_model_updates):
+        raise ValueError("Empty initial model requires allow_model_updates=True.")
 
     params = arguments.UserArguments(
         window_size=window_size,
@@ -189,7 +218,12 @@ def ticc_labels(data_series: np.ndarray,
             "array.  Did you mean to call ticc_joint_labels instead?"
         )) from not_a_numpy_array
 
-    ticc_result = main_loop.fit_stacked_data(params, stacked_data)
+    if initial_model:
+        _verify_data_compatible_with_model(stacked_data, initial_model)
+
+    ticc_result = main_loop.fit_stacked_data(params, stacked_data,
+                                             initial_model=initial_model,
+                                             optimize_model=allow_model_updates)
     ticc_result.point_labels = data_preparation.pad_missing_labels(ticc_result.point_labels,
                                                                    window_size)
     return ticc_result
@@ -204,7 +238,9 @@ def ticc_joint_labels(data_series: Sequence[np.ndarray],
                       min_meaningful_covariance: float = 0,
                       num_processors: int = 1,
                       min_cluster_size: int = 20,
-                      biased_covariance: bool = False
+                      biased_covariance: bool = False,
+                      initial_model: Optional[results.TiccModel] = None,
+                      allow_model_updates: bool = True
                       ) -> results.MultipleDataSeriesResult:
     """Compute TICC labels over several data series at once.
 
@@ -276,7 +312,8 @@ def ticc_joint_labels(data_series: Sequence[np.ndarray],
         window_size (int): Number of data points to stack together
             for window.  Defaults to 10.
         num_clusters (int): How many different labels to construct.
-            Defaults to 5.
+            Defaults to 5.  This value is ignored if you supply a value
+            for initial_model.
         sparsity_weight (float or NumPy array): Regularization term
             to encourage the solver to build sparse covariance matrices.
             Higher values of this parameter bias us toward inverse
@@ -299,12 +336,37 @@ def ticc_joint_labels(data_series: Sequence[np.ndarray],
             to reinitialize an empty cluster.  Defaults to 20.
         biased (bool): Whether to compute biased or unbiased covariance
             (i.e. divide by N or N-1).  Defaults to False (unbiased).
+        initial_model (results.TiccModel): Initial values for stacked
+                    covariance matrices and cluster means.  Get this from the
+                    ``trained_model`` field of the results from a previous run. Defaults
+                    to empty, in which case the model is initialized from the data. If
+                    you supply an initial model, num_clusters is set from the trained
+                    model instead of the value supplied for ``num_clusters``.
+        allow_model_updates (bool): If False, the model will be considered
+            frozen and the algorithm will exit after one pass of labeling the
+            input data.  This is what you should choose if you are labeling new
+            data with an existing model.  Defaults to True (perform full
+            optimization as normal).
 
     Returns:
         A list of TICC results, one for each input data series.  Point labels
         will be different across each individual result but all other fields
         will be the same.
     """
+
+    if initial_model:
+        if initial_model.num_clusters != num_clusters:
+            LOG.info("Overriding num_clusters with value (%s) from pre-trained model.",
+                     initial_model.num_clusters)
+            num_clusters = initial_model.num_clusters
+        if initial_model.window_size != window_size:
+            LOG.info("Overriding window_size with value (%s) from pre-trained model.",
+                     initial_model.window_size)
+            window_size = initial_model.window_size
+
+    if (not initial_model) and (not allow_model_updates):
+        raise ValueError("Empty initial model requires allow_model_updates=True.")
+
 
     # The user may have provided a forward-only iterable.  We need to
     # traverse it multiple times, so make it a list.
@@ -320,6 +382,9 @@ def ticc_joint_labels(data_series: Sequence[np.ndarray],
             "(or other iterable) of 2D NumPy arrays.  Did you mean to call "
             "ticc_labels instead?"
         )) from not_a_list_of_numpy_arrays
+
+    if initial_model:
+        _verify_data_compatible_with_model(combined_data_series, initial_model)
 
     stacked_data_sizes = [
         len(series) - window_size + 1
@@ -345,7 +410,9 @@ def ticc_joint_labels(data_series: Sequence[np.ndarray],
         "of inputted data series."
 
     # Here we go!  This will take a while.
-    master_result = main_loop.fit_stacked_data(args, combined_data_series)
+    master_result = main_loop.fit_stacked_data(args, combined_data_series,
+                                               initial_model=initial_model,
+                                               optimize_model=allow_model_updates)
 
     ticc_multi_result = _split_combined_result(master_result, stacked_data_sizes,
                                                data_series)
@@ -407,3 +474,41 @@ def _split_combined_result(master_result: results.SingleDataSeriesResult,
     )
 
     return ticc_multi_result
+
+def _verify_data_compatible_with_model(stacked_data: np.ndarray,
+                                       initial_model: results.TiccModel) -> None:
+    """Check the data to make sure it has the right dimensions
+
+    In order to use a pre-trained model with new data, the data must have
+    the same number of series (columns) as what the model was trained on.
+
+    Arguments:
+        stacked_data (numpy.ndarray): Input data after stacking
+        initial_model (fast_ticc.containers.results.TiccModel): Pre-trained model
+
+    Returns:
+        None - assume everything's OK
+
+    Raises:
+        ValueError: New data has the wrong number of series
+    """
+
+    if len(initial_model.per_cluster_mean) == 0:
+        raise RuntimeError("Initial model contains no cluster means.  This shouldn't happen.")
+
+    expected_num_columns = initial_model.per_cluster_mean[0].shape[0]
+    actual_num_columns = stacked_data.shape[1]
+
+    if expected_num_columns != actual_num_columns:
+        # The number of columns in stacked_data is (window_size *
+        # num_data_series).
+        expected_num_series = expected_num_columns / initial_model.window_size
+        actual_num_series = actual_num_columns / initial_model.window_size
+
+        raise ValueError((
+            f"New data array is not compatible with trained model. "
+            f"Trained model had {expected_num_series} columns but "
+            f"new data set has {actual_num_series} columns."
+            ))
+
+    # Otherwise we're OK to proceed.
