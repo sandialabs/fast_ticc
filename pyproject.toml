@@ -3,7 +3,7 @@
 [tool.poetry]
 
 name = "fast_ticc"
-version = "1.0.1"
+version = "1.1.0"
 description = "Covariance-based clustering of multivariate time-series data."
 license = "BSD-3-Clause"
 
@@ -28,7 +28,7 @@ maintainers = [
 
 readme = "README.md"
 repository = "https://github.com/sandialabs/fast_ticc"
-documentation = "https://fast-ticc.readthedocs.io"
+documentation = "https://sandialabs.github.io/fast_ticc/"
 keywords = [
     "clustering",
     "inverse covariance",
@@ -50,7 +50,7 @@ classifiers = [
 [tool.poetry.dependencies]
 numpy = ">=1.22"
 numba = ">=0.53.0"
-python = ">=3.6"
+python = ">=3.9"
 scikit-learn = ">=1.0.0"
 
 
